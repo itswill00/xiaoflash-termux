@@ -6,14 +6,14 @@ import subprocess
 import time
 import socket
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn, TaskProgressColumn
+from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn, TaskProgressColumn
 
 from core.mifirm_scraper import MiFirmScraper
 
 console = Console()
 
 class ROMDownloader:
-    """Xiaomi ROM Downloader"""
+    """Xiaomi ROM Downloader Engine"""
 
     @staticmethod
     def get_smart_recommendations(device_info):
@@ -39,23 +39,29 @@ class ROMDownloader:
     def download_rom(rom_item, destination_folder="/sdcard/Download"):
         os.makedirs(destination_folder, exist_ok=True)
         
-        url = rom_item.get("mifirm_url") or rom_item.get("url")
-        if not url and "download_id" in rom_item:
-            url = f"https://mifirm.net/download/{rom_item['download_id']}"
+        # 1. Resolve 100% direct bigota CDN URL
+        url = None
+        if "download_id" in rom_item:
+            console.print("Resolving direct Xiaomi CDN link...")
+            url = MiFirmScraper.get_direct_tgz_url(rom_item["download_id"], rom_item["version"])
 
         if not url:
-            console.print("[red]Error: Could not resolve download URL.[/red]")
+            url = rom_item.get("url")
+
+        if not url:
+            console.print("[red]Error: Could not resolve direct .tgz download URL.[/red]")
             return False, None
 
-        filename = f"{rom_item.get('codename', 'xiaomi')}_{rom_item.get('version', 'ROM')}.tgz"
+        filename = os.path.basename(url)
         dest_path = os.path.join(destination_folder, filename)
 
         console.print(f"\nDownload info:")
         console.print(f"  Version : {rom_item.get('version', 'N/A')}")
         console.print(f"  Region  : {rom_item.get('region', 'Global')}")
+        console.print(f"  URL     : {url}")
         console.print(f"  File    : {dest_path}\n")
 
-        # 1. Try aria2c
+        # 1. Priority 1: aria2c (Resumable multi-thread)
         aria2c_bin = shutil.which("aria2c")
         if aria2c_bin:
             console.print("Using aria2c...")
@@ -67,7 +73,7 @@ class ROMDownloader:
             except Exception:
                 pass
 
-        # 2. Try curl
+        # 2. Priority 2: curl
         curl_bin = shutil.which("curl")
         if curl_bin:
             console.print("Using curl...")
@@ -79,7 +85,7 @@ class ROMDownloader:
             except Exception:
                 pass
 
-        # 3. Fallback Python stream
+        # 3. Priority 3: Python Resumable Stream
         console.print("Using python downloader...")
         max_retries = 15
         retry_count = 0

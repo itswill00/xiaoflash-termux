@@ -40,50 +40,70 @@ def main():
 
             if choice == "1":
                 console.print("\n-- Flash ROM --")
-                rom_path = Prompt.ask("ROM path", default="/sdcard/Download/ginkgo_global_images.tgz")
+                rom_path = Prompt.ask("ROM path (.tgz / .tar.gz / folder)", default="/sdcard/Download/ginkgo_global_images.tgz")
 
                 if not os.path.exists(rom_path):
-                    console.print(f"Warning: '{rom_path}' not found.")
+                    console.print(f"[yellow]Error: '{rom_path}' not found.[/yellow]")
+                    input("Press Enter to return...")
+                    continue
+
+                # Auto-extract archive if user passed a .tgz / .tar.gz / .zip file
+                target_dir = rom_path
+                if os.path.isfile(rom_path) and (rom_path.endswith('.tgz') or rom_path.endswith('.tar.gz') or rom_path.endswith('.zip')):
+                    base_name = os.path.basename(rom_path).split('.')[0]
+                    target_dir = f"/sdcard/Download/{base_name}_extracted"
+                    console.print(f"Extracting ROM archive to '{target_dir}'...")
+                    ok_ext, err_ext = ROMExtractor.extract_rom(rom_path, target_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
+                    if not ok_ext:
+                        console.print(f"[red]Extraction failed: {err_ext}[/red]")
+                        input("Press Enter to return...")
+                        continue
 
                 console.print("\nModes:")
                 console.print("  1. flash_all (Clean install)")
                 console.print("  2. flash_all_except_storage (Save data)")
                 console.print("  3. flash_all_lock (Lock bootloader)")
                 
-                mode_choice = Prompt.ask("Mode", choices=["1", "2", "3"], default="1")
+                mode_choice = Prompt.ask("Select mode", choices=["1", "2", "3"], default="1")
                 mode_map = {"1": "flash_all", "2": "flash_all_except_data_storage", "3": "flash_all_lock"}
                 mode = mode_map[mode_choice]
 
                 safe, arb_msg, level = ARBChecker.verify_safety(device["anti"] if device else 1, 1)
                 if not safe:
-                    console.print(f"\n{arb_msg}")
+                    console.print(f"\n[red]{arb_msg}[/red]")
+                    input("Press Enter to return...")
+                    continue
+
+                # Parse actual flash script / scan existing image files
+                partitions = ROMExtractor.parse_flash_script(target_dir, mode)
+                if not partitions:
+                    console.print("[yellow]Warning: Could not parse flash script. Scanning directory for .img files...[/yellow]")
+                    img_dir = os.path.join(target_dir, "images") if os.path.exists(os.path.join(target_dir, "images")) else target_dir
+                    for root, _, files in os.walk(img_dir):
+                        for f in files:
+                            if f.endswith('.img') or f.endswith('.bin'):
+                                part_n = f.replace('.img', '').replace('.bin', '')
+                                partitions.append((part_n, os.path.join(root, f)))
+
+                if not partitions:
+                    console.print("[red]Error: No flashable partition images found in ROM directory.[/red]")
                     input("Press Enter to return...")
                     continue
 
                 dev_name = device["name"] if device else "Target"
-                if Confirm.ask(f"Flash {mode} to {dev_name}?"):
+                if Confirm.ask(f"Flash {len(partitions)} partition(s) [{mode}] to {dev_name}?"):
                     console.print(f"\nFlashing {mode}...")
-
-                    partitions = [
-                        ("gpt", "gpt.bin"),
-                        ("bootloader", "bootloader.bin"),
-                        ("modem", "modem.img"),
-                        ("dtbo", "dtbo.img"),
-                        ("boot", "boot.img"),
-                        ("recovery", "recovery.img"),
-                        ("vbmeta", "vbmeta.img"),
-                        ("super", "super.img"),
-                        ("cust", "cust.img")
-                    ]
 
                     serial = device["serial"] if device else "11bb599a"
                     is_simulated = device.get("is_simulated", False) if device else False
 
                     total = len(partitions)
-                    for idx, (part_name, img_name) in enumerate(partitions, start=1):
+                    for idx, (part_name, img_file) in enumerate(partitions, start=1):
                         if mode == "flash_all_except_data_storage" and part_name == "userdata":
                             console.print(f"[{idx}/{total}] Skip {part_name}")
                             continue
+
+                        img_full = img_file if os.path.isabs(img_file) else os.path.join(target_dir, img_file)
 
                         def log_cb(msg, status):
                             if status == "process":
@@ -94,10 +114,10 @@ def main():
                             elif status == "error":
                                 console.print(f"\r[{idx}/{total}] {part_name:<12} FAIL ({msg})")
 
-                        fastboot_instance.flash_partition(serial, part_name, img_name, is_simulated=is_simulated, callback=log_cb)
+                        fastboot_instance.flash_partition(serial, part_name, img_full, is_simulated=is_simulated, callback=log_cb)
 
-                    console.print("\nFlashing finished.")
-                    if Confirm.ask("Reboot device?"):
+                    console.print("\nFlashing completed successfully.")
+                    if Confirm.ask("Reboot device now?"):
                         fastboot_instance.reboot(serial, "system", is_simulated=is_simulated)
 
             elif choice == "2":
@@ -108,7 +128,7 @@ def main():
                 if detected_code and smart_roms:
                     results = smart_roms
                 else:
-                    query = Prompt.ask("Search codename/model", default="ginkgo")
+                    query = Prompt.ask("Search model or codename", default="ginkgo")
                     results = ROMDownloader.search_roms(query)
 
                 if not results:
@@ -123,7 +143,7 @@ def main():
                         selected_rom = results[int(dl_choice) - 1]
                         ok, downloaded_path = ROMDownloader.download_rom(selected_rom)
 
-                        if ok and Confirm.ask("Extract downloaded ROM now?"):
+                        if ok and Confirm.ask("\nExtract downloaded ROM archive now?"):
                             extract_dir = f"/sdcard/Download/{selected_rom['codename']}_extracted"
                             console.print(f"Extracting to '{extract_dir}'...")
                             ROMExtractor.extract_rom(downloaded_path, extract_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
@@ -140,14 +160,14 @@ def main():
                     BootPatcher.patch_and_flash(fastboot_instance, serial, boot_path, root_type=root_type, is_simulated=is_simulated)
 
             elif choice == "4":
-                console.print("\n-- Flash Image --")
+                console.print("\n-- Flash Single Image --")
                 partition = Prompt.ask("Partition", default="boot")
                 img_path = Prompt.ask("Image path", default="/sdcard/Download/boot.img")
 
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
 
-                if Confirm.ask(f"Flash '{img_path}' -> {partition}?"):
+                if Confirm.ask(f"Flash '{img_path}' to {partition}?"):
                     def cb(m, s):
                         if s == "success":
                             console.print(f"{partition} OKAY")
@@ -184,7 +204,7 @@ def main():
             elif choice == "0":
                 graceful_exit()
 
-            input("\nPress Enter...")
+            input("\nPress Enter to continue...")
             device, msg = fastboot_instance.scan_devices()
 
         except (KeyboardInterrupt, EOFError):

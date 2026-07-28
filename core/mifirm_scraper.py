@@ -7,14 +7,10 @@ from rich.console import Console
 console = Console()
 
 class MiFirmScraper:
-    """Live Real-Time Web Scraper Engine for MiFirm.net"""
+    """Live Web Scraper & Direct Fastboot ROM Link Resolver"""
 
     @staticmethod
     def scrape_model_roms(codename):
-        """
-        Scrapes live Fastboot ROM catalog for a codename from mifirm.net
-        Supports all regions (Global, Indonesia, Europe, India, China)
-        """
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         
         region_suffixes = [
@@ -35,7 +31,6 @@ class MiFirmScraper:
                 req = urllib.request.Request(url, headers=headers)
                 html = urllib.request.urlopen(req, timeout=5).read().decode('utf-8')
 
-                # Parse rows containing /download/
                 rows = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL)
                 for r in rows:
                     if 'download/' in r:
@@ -51,8 +46,6 @@ class MiFirmScraper:
                             size = size_match.group(1) if size_match else "3.5G"
                             is_hyperos = "OS1" in ver
 
-                            mifirm_link = f"https://mifirm.net/download/{dl_id}"
-
                             scraped_roms.append({
                                 "codename": codename,
                                 "name": f"Xiaomi ({codename})",
@@ -62,11 +55,44 @@ class MiFirmScraper:
                                 "android": and_ver,
                                 "type": "Fastboot",
                                 "download_id": dl_id,
-                                "mifirm_url": mifirm_link,
-                                "url": mifirm_link,
                                 "size": size
                             })
             except:
                 pass
 
         return scraped_roms
+
+    @staticmethod
+    def get_direct_tgz_url(download_id, version):
+        """
+        Scrapes mifirm.net download page to extract exact .tgz filename and builds 100% working direct bigota CDN URL
+        """
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        url = f"https://mifirm.net/download/{download_id}"
+
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            html = urllib.request.urlopen(req, timeout=8).read().decode('utf-8')
+
+            filename_match = re.search(r'([a-zA-Z0-9_\-\.]+\.tgz)', html)
+            if filename_match:
+                filename = filename_match.group(1)
+                direct_url = f"https://bigota.d.miui.com/{version}/{filename}"
+
+                # Verify direct URL status
+                test_req = urllib.request.Request(direct_url, headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-100'})
+                try:
+                    res = urllib.request.urlopen(test_req, timeout=5)
+                    if res.status in (200, 206):
+                        return direct_url
+                except:
+                    pass
+
+                # Fallback to hugeota CDN
+                fallback_url = f"https://hugeota.d.miui.com/{version}/{filename}"
+                return fallback_url
+
+        except Exception as e:
+            console.print(f"[red]Error resolving direct link: {str(e)}[/red]")
+
+        return None
