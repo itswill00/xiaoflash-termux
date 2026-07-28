@@ -29,6 +29,14 @@ def graceful_exit(signum=None, frame=None):
 signal.signal(signal.SIGINT, graceful_exit)
 signal.signal(signal.SIGTERM, graceful_exit)
 
+def format_size(bytes_val):
+    if bytes_val < 1024 * 1024:
+        return f"{bytes_val / 1024:.1f} KB"
+    elif bytes_val < 1024 * 1024 * 1024:
+        return f"{bytes_val / (1024 * 1024):.1f} MB"
+    else:
+        return f"{bytes_val / (1024 * 1024 * 1024):.2f} GB"
+
 def main():
     global fastboot_instance
     fastboot_instance = FastbootOTG()
@@ -97,10 +105,10 @@ def main():
                 console.print(f"Mode  : {mode}")
                 console.print(f"Count : {len(partitions)} partition(s) ready to flash")
                 if is_simulated:
-                    console.print("[yellow]Note : SIMULATION MODE ACTIVE (No physical USB OTG connected)[/yellow]")
+                    console.print("[yellow]Note  : SIMULATION MODE ACTIVE (No physical USB OTG connected)[/yellow]")
 
                 if Confirm.ask(f"\nProceed with flashing?"):
-                    console.print(f"\nInitiating fastboot flash sequence...")
+                    console.print(f"\nInitiating fastboot flash sequence ({len(partitions)} partitions)...\n")
                     start_time = time.time()
 
                     total = len(partitions)
@@ -108,24 +116,24 @@ def main():
 
                     for idx, (part_name, img_file) in enumerate(partitions, start=1):
                         if mode == "flash_all_except_data_storage" and part_name == "userdata":
-                            console.print(f"[{idx}/{total}] Skip {part_name} (Preserve User Data)")
+                            console.print(f"  [{idx}/{total}] {part_name:<12} [dim]SKIP (Preserve User Data)[/dim]")
                             continue
 
                         img_full = img_file if os.path.isabs(img_file) else os.path.join(target_dir, img_file)
-                        img_size_mb = f"{os.path.getsize(img_full) / (1024*1024):.1f}MB" if os.path.exists(img_full) else "N/A"
+                        img_size_str = format_size(os.path.getsize(img_full)) if os.path.exists(img_full) else "N/A"
+
+                        sys.stdout.write(f"  [{idx}/{total}] {part_name:<12} ({img_size_str:<8}) ... ")
+                        sys.stdout.flush()
 
                         def log_cb(msg, status):
-                            if status == "process":
-                                sys.stdout.write(f"\r\033[K[{idx}/{total}] {part_name:<12} ({img_size_mb}) • {msg}")
-                                sys.stdout.flush()
-                            elif status == "success":
-                                console.print(f"\r\033[K[{idx}/{total}] {part_name:<12} ({img_size_mb}) • [green]OKAY[/green]")
-                            elif status == "error":
-                                console.print(f"\r\033[K[{idx}/{total}] {part_name:<12} ({img_size_mb}) • [red]FAIL ({msg})[/red]")
+                            pass
 
                         ok_p, _ = fastboot_instance.flash_partition(serial, part_name, img_full, is_simulated=is_simulated, callback=log_cb)
                         if ok_p:
                             success_count += 1
+                            console.print("[bold green]OKAY[/bold green]")
+                        else:
+                            console.print("[bold red]FAIL[/bold red]")
 
                     elapsed = time.time() - start_time
                     console.print(f"\n[green]Flashing completed in {elapsed:.1f}s ({success_count}/{total} partitions OK).[/green]")
