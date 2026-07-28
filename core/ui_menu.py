@@ -4,8 +4,11 @@ from rich.prompt import Prompt
 
 console = Console()
 
-def render_header(device_data=None):
+def clear_screen():
     os.system("clear" if os.name != "nt" else "cls")
+
+def render_header(device_data=None):
+    clear_screen()
     console.print("[bold white]XiaoFlash 1.0[/bold white] [dim]- Xiaomi Fastboot OTG Tool[/dim]")
     
     if device_data and not device_data.get("is_simulated"):
@@ -24,6 +27,10 @@ def render_header(device_data=None):
     else:
         console.print("  Target Device : Disconnected (Target must be in Fastboot mode)")
     console.print("[dim]--------------------------------------------------------------[/dim]")
+
+def render_section_header(device_data, title):
+    render_header(device_data)
+    console.print(f"[bold cyan]-- {title} --[/bold cyan]\n")
 
 def show_main_menu():
     console.print("Options:")
