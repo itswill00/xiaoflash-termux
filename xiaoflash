@@ -23,6 +23,7 @@ def graceful_exit(signum=None, frame=None):
             fastboot_instance.py_fb.dispose()
         except:
             pass
+    console.print("\n[dim]Exiting...[/dim]")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, graceful_exit)
@@ -44,7 +45,7 @@ def main():
 
                 if not os.path.exists(rom_path):
                     console.print(f"[yellow]Error: Path '{rom_path}' does not exist on storage.[/yellow]")
-                    input("Press Enter to return...")
+                    Prompt.ask("\nPress Enter to return", default="")
                     continue
 
                 target_dir = rom_path
@@ -55,7 +56,7 @@ def main():
                     ok_ext, err_ext = ROMExtractor.extract_rom(rom_path, target_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
                     if not ok_ext:
                         console.print(f"[red]Extraction error: {err_ext}[/red]")
-                        input("Press Enter to return...")
+                        Prompt.ask("\nPress Enter to return", default="")
                         continue
 
                 console.print("\nFlashing Modes:")
@@ -70,7 +71,7 @@ def main():
                 safe, arb_msg, level = ARBChecker.verify_safety(device["anti"] if device else 1, 1)
                 if not safe:
                     console.print(f"\n[red]{arb_msg}[/red]")
-                    input("Press Enter to return...")
+                    Prompt.ask("\nPress Enter to return", default="")
                     continue
 
                 partitions = ROMExtractor.parse_flash_script(target_dir, mode)
@@ -85,7 +86,7 @@ def main():
 
                 if not partitions:
                     console.print("[red]Error: No flashable partition images found.[/red]")
-                    input("Press Enter to return...")
+                    Prompt.ask("\nPress Enter to return", default="")
                     continue
 
                 dev_name = device["name"] if device else "Target"
@@ -217,7 +218,7 @@ def main():
             elif choice == "0":
                 graceful_exit()
 
-            input("\nPress Enter to continue...")
+            Prompt.ask("\nPress Enter to continue", default="")
             device, msg = fastboot_instance.scan_devices()
 
         except (KeyboardInterrupt, EOFError):

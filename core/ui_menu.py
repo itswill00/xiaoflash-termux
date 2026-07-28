@@ -1,10 +1,12 @@
+import os
 from rich.console import Console
 from rich.prompt import Prompt
 
 console = Console()
 
 def render_header(device_data=None):
-    console.print("\n[bold white]XiaoFlash 1.0[/bold white] [dim]- Xiaomi Fastboot OTG Tool[/dim]")
+    os.system("clear" if os.name != "nt" else "cls")
+    console.print("[bold white]XiaoFlash 1.0[/bold white] [dim]- Xiaomi Fastboot OTG Tool[/dim]")
     
     if device_data and not device_data.get("is_simulated"):
         name = device_data['name']
