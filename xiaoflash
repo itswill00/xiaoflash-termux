@@ -103,45 +103,37 @@ def main():
                         console.print("[green]Reboot command sent successfully.[/green]")
 
             elif choice == "2":
-                console.print("[bold white]── Official Xiaomi ROM Downloader Engine ──[/bold white]")
-                query = Prompt.ask("Search device name or codename", default=device.get("product", "ginkgo") if device else "ginkgo")
+                console.print("[bold white]── Smart Official Xiaomi ROM Downloader ──[/bold white]")
 
-                console.print("\n[bold white]Filter Region:[/bold white]")
-                console.print("  [1] All Regions")
-                console.print("  [2] Global (MI)")
-                console.print("  [3] Indonesia (ID)")
-                console.print("  [4] Europe (EEA)")
-                console.print("  [5] India (IN)")
-                console.print("  [6] China (CN)")
-                region_idx = Prompt.ask("Select region", choices=["1", "2", "3", "4", "5", "6"], default="1")
-                region_map = {"1": "All Regions", "2": "Global (MI)", "3": "Indonesia (ID)", "4": "Europe (EEA)", "5": "India (IN)", "6": "China (CN)"}
-                selected_region = region_map[region_idx]
+                detected_code, smart_roms = ROMDownloader.get_smart_recommendations(device)
 
-                console.print("\n[bold white]Filter Android Version:[/bold white]")
-                console.print("  [1] All Versions")
-                console.print("  [2] Android 14 (HyperOS)")
-                console.print("  [3] Android 13 (MIUI 14)")
-                console.print("  [4] Android 12 (MIUI 13/14)")
-                console.print("  [5] Android 11 (MIUI 12.5)")
-                android_idx = Prompt.ask("Select Android version", choices=["1", "2", "3", "4", "5"], default="1")
-                android_map = {"1": "All Versions", "2": "Android 14", "3": "Android 13", "4": "Android 12", "5": "Android 11"}
-                selected_android = android_map[android_idx]
-
-                results = ROMDownloader.search_roms(query, region=selected_region, android_ver=selected_android)
+                if detected_code and smart_roms:
+                    console.print(f"🎯 [bold green]Smart Hardware Auto-Detect:[/bold green] Connected target is [bold cyan]{device['name']}[/bold cyan] ([yellow]{detected_code}[/yellow])")
+                    console.print(f"🛡️ [bold green]ARB Safeguard:[/bold green] Showing 100% ARB-compatible ROMs (Level >= v{device['anti']})\n")
+                    results = smart_roms
+                else:
+                    query = Prompt.ask("Search device name or codename", default="ginkgo")
+                    results = ROMDownloader.search_roms(query)
 
                 if not results:
                     console.print("\n[bold yellow]No Fastboot ROM packages match the selected criteria.[/bold yellow]")
                 else:
-                    console.print(f"\n[bold cyan]Found {len(results)} Fastboot ROM Package(s):[/bold cyan]\n")
+                    console.print(f"[bold cyan]Available Official Fastboot ROMs ({len(results)} found):[/bold cyan]\n")
                     for idx, r in enumerate(results, start=1):
                         console.print(f"  [{idx}] [bold white]{r['name']}[/bold white] ({r['codename']})")
                         console.print(f"      Region  : [green]{r['region']}[/green] • Build: [yellow]{r['version']}[/yellow]")
-                        console.print(f"      OS/Ver  : {r['os']} (Android {r['android']}) • Size: {r['size']}")
+                        console.print(f"      OS/Ver  : {r['os']} (Android {r['android']}) • ARB: v{r.get('arb', 1)} • Size: {r['size']}")
 
                     dl_choice = Prompt.ask("\nSelect ROM to download (or 0 to cancel)", choices=[str(i) for i in range(len(results) + 1)], default="1")
                     if dl_choice != "0":
                         selected_rom = results[int(dl_choice) - 1]
-                        ROMDownloader.download_file(selected_rom["url"])
+                        ok, downloaded_path = ROMDownloader.download_file(selected_rom["url"])
+
+                        if ok and Confirm.ask("\nExtract downloaded ROM package to ready-to-flash directory now?"):
+                            extract_dir = f"/sdcard/Download/{selected_rom['codename']}_extracted"
+                            console.print(f"\n[bold cyan]📦 Extracting package to '{extract_dir}'...[/bold cyan]")
+                            ROMExtractor.extract_rom(downloaded_path, extract_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
+                            console.print("\n[bold green]✔ ROM is extracted and ready for flashing in Option 1![/bold green]")
 
             elif choice == "3":
                 console.print("[bold white]── Root Target Device (Boot Patch) ──[/bold white]")
