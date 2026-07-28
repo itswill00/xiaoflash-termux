@@ -1,22 +1,22 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# XiaoFlash Termux OTG Installer Script
+# XiaoFlash Termux OTG Utility Setup Script
 
 set -e
 
-echo "-----------------------------------------------------------------"
-echo "XiaoFlash - Xiaomi Fastboot OTG Utility Installer"
+echo "XiaoFlash 1.0 • Setup Installer"
 echo "-----------------------------------------------------------------"
 
 # 1. Update package lists and install required dependencies
-echo "Installing required Termux packages (python, libusb, android-tools)..."
-pkg update -y || true
-pkg install python libusb android-tools -y
+echo ":: Installing Termux packages (python, libusb, android-tools)..."
+pkg update -y > /dev/null 2>&1 || true
+pkg install python libusb android-tools -y > /dev/null 2>&1
 
 # 2. Install Python requirements
-echo "Installing Python dependencies (rich, pyusb)..."
-pip install --break-system-packages -r "$(dirname "$0")/requirements.txt" || pip install -r "$(dirname "$0")/requirements.txt"
+echo ":: Installing Python dependencies (rich, pyusb)..."
+pip install --break-system-packages -r "$(dirname "$0")/requirements.txt" > /dev/null 2>&1 || pip install -r "$(dirname "$0")/requirements.txt" > /dev/null 2>&1
 
 # 3. Setup launcher link
+echo ":: Configuring executable launcher..."
 LAUNCHER_PATH="/data/data/com.termux/files/usr/bin/xiaoflash"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/xiaoflash"
@@ -43,6 +43,5 @@ EOF
 chmod +x "$LAUNCHER_PATH"
 
 echo "-----------------------------------------------------------------"
-echo "XiaoFlash installation completed successfully."
-echo "Usage: Simply type 'xiaoflash' anywhere in Termux."
+echo "Setup complete. Type 'xiaoflash' to launch utility."
 echo "-----------------------------------------------------------------"
