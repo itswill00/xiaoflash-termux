@@ -1,0 +1,22 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Downloaded ROMs and Firmware images
+*.tgz
+*.tar.gz
+*.zip
+*.img
+*.bin
+images/
+
+# Termux / OS artifacts
+.DS_Store
+.idea/
+.vscode/
