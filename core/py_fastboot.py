@@ -7,7 +7,7 @@ import os
 import time
 
 class PyFastboot:
-    """Pure Python Fastboot USB Protocol Engine"""
+    """Pure Python Fastboot USB Protocol Engine with USB Reset Recovery"""
 
     def __init__(self, vendor_id=0x18d1, product_id=0xd00d):
         self.vendor_id = vendor_id
@@ -38,14 +38,12 @@ class PyFastboot:
         try:
             find_kwargs = {"backend": self.backend} if self.backend else {}
             
-            # 1. Search by common Fastboot Vendor IDs
             known_vids = [0x18d1, 0x2717, 0x0e8d, 0x05c6, 0x0b05, 0x2a45, 0x22d9, 0x2a70]
             for vid in known_vids:
                 self.dev = usb.core.find(idVendor=vid, **find_kwargs)
                 if self.dev is not None:
                     break
             
-            # 2. Search all connected devices by Fastboot Interface Class (0xFF, 0x42)
             if self.dev is None:
                 try:
                     for d in usb.core.find(find_all=True, **find_kwargs):
@@ -68,22 +66,28 @@ class PyFastboot:
             if self.dev is None:
                 return False, "Fastboot device not found on USB OTG bus."
 
-            # Set active configuration
+            # Reset USB bus state to resolve [Errno 16] Resource busy locks
             try:
-                self.dev.set_configuration()
-            except usb.core.USBError:
+                self.dev.reset()
+            except:
                 pass
 
-            cfg = self.dev.get_active_configuration()
-            intf = cfg[(0, 0)]
-
-            # Claim interface if kernel driver attached
             try:
                 if self.dev.is_kernel_driver_active(0):
                     self.dev.detach_kernel_driver(0)
-            except (NotImplementedError, usb.core.USBError):
+            except:
                 pass
 
+            try:
+                cfg = self.dev.get_active_configuration()
+            except:
+                try:
+                    self.dev.set_configuration()
+                    cfg = self.dev.get_active_configuration()
+                except:
+                    pass
+
+            intf = cfg[(0, 0)]
             for ep in intf:
                 if usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT:
                     self.ep_out = ep
