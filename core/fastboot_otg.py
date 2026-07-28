@@ -7,7 +7,7 @@ import shutil
 from core.py_fastboot import PyFastboot
 
 class FastbootOTG:
-    """Enterprise Fastboot USB-OTG Controller for Termux"""
+    """Fastboot USB-OTG Controller for Termux"""
     
     def __init__(self):
         self.py_fb = PyFastboot()
@@ -43,7 +43,7 @@ class FastbootOTG:
 
             return {
                 "serial": serial,
-                "mode": "Fastboot OTG (PyUSB High-Speed Engine)",
+                "mode": "Fastboot OTG (PyUSB Engine)",
                 "product": product,
                 "name": dev_name,
                 "chipset": "Qualcomm / MediaTek",
@@ -93,15 +93,15 @@ class FastbootOTG:
                     if callback:
                         callback(f"[{pct}%] Sending '{partition}' payload...", "process")
 
-                # 1. Download binary data to target
+                # 1. Download binary data payload to target
                 ok_data, resp_data = self.py_fb.send_data(img_path, callback=progress_cb)
                 if not ok_data:
                     if callback:
                         callback(f"Download stream '{partition}' failed: {resp_data}", "error")
                     return False, resp_data
 
-                # 2. Flash partition command
-                ok_flash, resp_flash = self.py_fb.send_cmd(f"flash:{partition}", timeout=60000)
+                # 2. Execute partition flash command
+                ok_flash, resp_flash = self.py_fb.send_command(f"flash:{partition}", timeout=300000)
                 if ok_flash:
                     if callback:
                         callback(f"Flashing '{partition}' OKAY", "success")

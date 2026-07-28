@@ -138,12 +138,12 @@ def main():
                         def log_cb(msg, status):
                             pass
 
-                        ok_p, _ = fastboot_instance.flash_partition(serial, part_name, img_full, is_simulated=is_simulated, callback=log_cb)
+                        ok_p, err_p = fastboot_instance.flash_partition(serial, part_name, img_full, is_simulated=is_simulated, callback=log_cb)
                         if ok_p:
                             success_count += 1
                             console.print("[bold green]OKAY[/bold green]")
                         else:
-                            console.print("[bold red]FAIL[/bold red]")
+                            console.print(f"[bold red]FAIL ({err_p})[/bold red]")
 
                     elapsed = time.time() - start_time
                     console.print(f"\n[green]Flashing completed in {elapsed:.1f}s ({success_count}/{total} partitions OK).[/green]")
