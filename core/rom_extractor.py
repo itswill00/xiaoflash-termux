@@ -52,6 +52,21 @@ class ROMExtractor:
 
     @staticmethod
     def parse_flash_script(images_dir, mode="flash_all"):
+        # Auto-detect nested subdirectory containing flash_all.sh / flash_all.bat
+        if os.path.exists(images_dir):
+            script_candidates = [f"{mode}.sh", f"{mode}.bat"]
+            has_script = any(os.path.exists(os.path.join(images_dir, c)) for c in script_candidates)
+
+            if not has_script:
+                try:
+                    subdirs = [os.path.join(images_dir, d) for d in os.listdir(images_dir) if os.path.isdir(os.path.join(images_dir, d))]
+                    for sd in subdirs:
+                        if any(os.path.exists(os.path.join(sd, c)) for c in script_candidates):
+                            images_dir = sd
+                            break
+                except:
+                    pass
+
         script_candidates = [f"{mode}.sh", f"{mode}.bat"]
         script_path = None
 
@@ -75,8 +90,12 @@ class ROMExtractor:
                             part_name = match.group(1)
                             img_file = match.group(2).replace("%~dp0", "").replace("`", "").replace("\"", "").replace("'", "")
                             img_file = img_file.replace("\\", "/")
+                            
+                            # Resolve full image path relative to script_path
+                            img_full_path = img_file if os.path.isabs(img_file) else os.path.join(os.path.dirname(script_path), img_file)
+
                             if not part_name.startswith("$") and not part_name.startswith("%") and not part_name.startswith("gpt_"):
-                                partitions.append((part_name, img_file))
+                                partitions.append((part_name, img_full_path))
 
         if not partitions:
             img_dir = os.path.join(images_dir, "images") if os.path.exists(os.path.join(images_dir, "images")) else images_dir
