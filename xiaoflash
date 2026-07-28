@@ -90,16 +90,18 @@ def main():
                     continue
 
                 dev_name = device["name"] if device else "Target"
+                is_simulated = device.get("is_simulated", False) if device else False
+                serial = device["serial"] if device else "11bb599a"
+
                 console.print(f"\nTarget: {dev_name} ({device['product'] if device else 'ginkgo'})")
                 console.print(f"Mode  : {mode}")
                 console.print(f"Count : {len(partitions)} partition(s) ready to flash")
+                if is_simulated:
+                    console.print("[yellow]Note : SIMULATION MODE ACTIVE (No physical USB OTG connected)[/yellow]")
 
                 if Confirm.ask(f"\nProceed with flashing?"):
                     console.print(f"\nInitiating fastboot flash sequence...")
                     start_time = time.time()
-
-                    serial = device["serial"] if device else "11bb599a"
-                    is_simulated = device.get("is_simulated", False) if device else False
 
                     total = len(partitions)
                     success_count = 0
@@ -114,12 +116,12 @@ def main():
 
                         def log_cb(msg, status):
                             if status == "process":
-                                sys.stdout.write(f"\r[{idx}/{total}] {part_name:<12} ({img_size_mb}) • {msg}")
+                                sys.stdout.write(f"\r\033[K[{idx}/{total}] {part_name:<12} ({img_size_mb}) • {msg}")
                                 sys.stdout.flush()
                             elif status == "success":
-                                console.print(f"\r[{idx}/{total}] {part_name:<12} ({img_size_mb}) • [green]OKAY[/green]")
+                                console.print(f"\r\033[K[{idx}/{total}] {part_name:<12} ({img_size_mb}) • [green]OKAY[/green]")
                             elif status == "error":
-                                console.print(f"\r[{idx}/{total}] {part_name:<12} ({img_size_mb}) • [red]FAIL ({msg})[/red]")
+                                console.print(f"\r\033[K[{idx}/{total}] {part_name:<12} ({img_size_mb}) • [red]FAIL ({msg})[/red]")
 
                         ok_p, _ = fastboot_instance.flash_partition(serial, part_name, img_full, is_simulated=is_simulated, callback=log_cb)
                         if ok_p:

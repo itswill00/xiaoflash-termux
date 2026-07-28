@@ -1,4 +1,5 @@
 import os
+import re
 import tarfile
 import zipfile
 from rich.console import Console
@@ -51,32 +52,37 @@ class ROMExtractor:
 
     @staticmethod
     def parse_flash_script(images_dir, mode="flash_all"):
-        script_name = f"{mode}.sh"
-        script_path = os.path.join(images_dir, script_name)
+        script_candidates = [f"{mode}.sh", f"{mode}.bat"]
+        script_path = None
+
+        for sc in script_candidates:
+            sp = os.path.join(images_dir, sc)
+            if os.path.exists(sp):
+                script_path = sp
+                break
 
         partitions = []
 
-        if os.path.exists(script_path):
-            console.print(f"Parsing Xiaomi flash script: [cyan]{script_name}[/cyan]")
+        if script_path:
+            console.print(f"Parsing Xiaomi flash script: [cyan]{os.path.basename(script_path)}[/cyan]")
             with open(script_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
                 for line in lines:
                     line = line.strip()
-                    if line.startswith("fastboot") and "flash" in line:
-                        parts = line.split()
-                        try:
-                            flash_idx = parts.index("flash")
-                            part_name = parts[flash_idx + 1]
-                            img_file = parts[flash_idx + 2]
-                            partitions.append((part_name, img_file))
-                        except:
-                            pass
+                    if "fastboot" in line and "flash" in line and not line.startswith("echo") and not line.startswith("::") and not line.startswith("#"):
+                        match = re.search(r"fastboot\s+(?:[^\s]+\s+)*flash\s+([^\s]+)\s+([^\s\|;&]+)", line)
+                        if match:
+                            part_name = match.group(1)
+                            img_file = match.group(2).replace("%~dp0", "").replace("`", "").replace("\"", "").replace("'", "")
+                            img_file = img_file.replace("\\", "/")
+                            if not part_name.startswith("$") and not part_name.startswith("%") and not part_name.startswith("gpt_"):
+                                partitions.append((part_name, img_file))
 
         if not partitions:
             img_dir = os.path.join(images_dir, "images") if os.path.exists(os.path.join(images_dir, "images")) else images_dir
             if os.path.exists(img_dir):
                 console.print(f"Scanning image directory: [cyan]{img_dir}[/cyan]")
-                standard_parts = ["gpt.bin", "boot.img", "init_boot.img", "dtbo.img", "recovery.img", "super.img", "vbmeta.img", "vendor_boot.img", "cust.img"]
+                standard_parts = ["boot.img", "init_boot.img", "dtbo.img", "recovery.img", "super.img", "vendor.img", "system.img", "cust.img", "vbmeta.img", "vendor_boot.img", "modem.img", "NON-HLOS.bin"]
                 for item in standard_parts:
                     full_p = os.path.join(img_dir, item)
                     if os.path.exists(full_p):
