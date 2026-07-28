@@ -7,7 +7,7 @@ console = Console()
 def render_header(device_data=None):
     os.system("clear" if os.name != "nt" else "cls")
     
-    console.print("[bold white]XiaoFlash[/bold white] [dim]v1.0 • Xiaomi Fastboot OTG Tool[/dim]")
+    console.print("[bold white]XiaoFlash[/bold white] [dim]v1.1 • Xiaomi Fastboot OTG & Root Suite[/dim]")
     console.print("[dim]──────────────────────────────────────────────────────────────[/dim]")
 
     if device_data and not device_data.get("is_simulated"):
@@ -26,9 +26,11 @@ def render_header(device_data=None):
 def show_main_menu():
     console.print("[bold white]Select Operation:[/bold white]")
     console.print("  [bold cyan]1.[/bold cyan] Flash Fastboot ROM  [dim](.tgz / .tar.gz / extracted folder)[/dim]")
-    console.print("  [bold cyan]2.[/bold cyan] Flash Partition     [dim](.img: boot, recovery, super, etc.)[/dim]")
-    console.print("  [bold cyan]3.[/bold cyan] Rescue & Reboot     [dim](System / Fastboot / Recovery)[/dim]")
-    console.print("  [bold cyan]4.[/bold cyan] Device Info & ARB")
+    console.print("  [bold cyan]2.[/bold cyan] Download Official ROM [dim](MIUI & HyperOS CDN Downloader)[/dim]")
+    console.print("  [bold cyan]3.[/bold cyan] Root Target Device    [dim](Magisk / KernelSU Boot Patch)[/dim]")
+    console.print("  [bold cyan]4.[/bold cyan] Flash Partition       [dim](.img: boot, recovery, super, etc.)[/dim]")
+    console.print("  [bold cyan]5.[/bold cyan] Rescue & Reboot       [dim](System / Fastboot / Recovery)[/dim]")
+    console.print("  [bold cyan]6.[/bold cyan] Device Info & ARB")
     console.print("  [bold dim]0. Exit[/bold dim]\n")
 
-    return Prompt.ask("[bold white]Action[/bold white]", choices=["1", "2", "3", "4", "0"], default="1")
+    return Prompt.ask("[bold white]Action[/bold white]", choices=["1", "2", "3", "4", "5", "6", "0"], default="1")
