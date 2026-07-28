@@ -40,6 +40,7 @@ def show_main_menu():
     console.print("  4. Flash single partition   [.img file]")
     console.print("  5. Reboot device            [System / Bootloader / Recovery]")
     console.print("  6. Check device info & ARB")
+    console.print("  7. Interactive Fastboot CLI [Run custom fastboot commands]")
     console.print("  0. Exit")
 
-    return Prompt.ask("\nSelect option", choices=["1", "2", "3", "4", "5", "6", "0"], default="1")
+    return Prompt.ask("\nSelect option", choices=["1", "2", "3", "4", "5", "6", "7", "0"], default="1")

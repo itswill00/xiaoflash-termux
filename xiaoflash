@@ -21,6 +21,7 @@ from core.arb_checker import ARBChecker
 from core.rom_extractor import ROMExtractor
 from core.rom_downloader import ROMDownloader
 from core.boot_patcher import BootPatcher
+from core.fastboot_shell import FastbootShell
 from core.ui_menu import console, render_header, render_section_header, show_main_menu, clear_screen
 from rich.prompt import Prompt, Confirm
 
@@ -264,6 +265,10 @@ def main():
                     console.print(f"  Bootloader   : [green]{device['unlocked'].upper()}[/green]")
                     console.print(f"  Battery      : {device['battery']}")
                     console.print(f"  Driver Engine: {device['mode']}")
+
+            elif choice == "7":
+                render_section_header(device, "Interactive Fastboot CLI Shell")
+                FastbootShell.run_interactive_shell(fastboot_instance, device)
 
             elif choice == "0":
                 graceful_exit()
