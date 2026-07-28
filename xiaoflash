@@ -103,13 +103,12 @@ def main():
                         console.print("[green]Reboot command sent successfully.[/green]")
 
             elif choice == "2":
-                console.print("[bold white]── Smart Official Xiaomi ROM Downloader ──[/bold white]")
+                console.print("[bold white]── Live MiFirm.net ROM Downloader Engine ──[/bold white]")
 
                 detected_code, smart_roms = ROMDownloader.get_smart_recommendations(device)
 
                 if detected_code and smart_roms:
-                    console.print(f"🎯 [bold green]Smart Hardware Auto-Detect:[/bold green] Connected target is [bold cyan]{device['name']}[/bold cyan] ([yellow]{detected_code}[/yellow])")
-                    console.print(f"🛡️ [bold green]ARB Safeguard:[/bold green] Showing 100% ARB-compatible ROMs (Level >= v{device['anti']})\n")
+                    console.print(f"🎯 [bold green]Smart Auto-Detect:[/bold green] Connected target is [bold cyan]{device['name']}[/bold cyan] ([yellow]{detected_code}[/yellow])")
                     results = smart_roms
                 else:
                     query = Prompt.ask("Search device name or codename", default="ginkgo")
@@ -118,16 +117,15 @@ def main():
                 if not results:
                     console.print("\n[bold yellow]No Fastboot ROM packages match the selected criteria.[/bold yellow]")
                 else:
-                    console.print(f"[bold cyan]Available Official Fastboot ROMs ({len(results)} found):[/bold cyan]\n")
-                    for idx, r in enumerate(results, start=1):
-                        console.print(f"  [{idx}] [bold white]{r['name']}[/bold white] ({r['codename']})")
-                        console.print(f"      Region  : [green]{r['region']}[/green] • Build: [yellow]{r['version']}[/yellow]")
-                        console.print(f"      OS/Ver  : {r['os']} (Android {r['android']}) • ARB: v{r.get('arb', 1)} • Size: {r['size']}")
+                    console.print(f"\n[bold cyan]Live Fastboot ROMs on MiFirm.net ({len(results)} found):[/bold cyan]\n")
+                    for idx, r in enumerate(results[:15], start=1):
+                        console.print(f"  [{idx}] [bold white]{r['version']}[/bold white]")
+                        console.print(f"      Region  : [green]{r['region']}[/green] • OS: {r['os']} • Size: {r['size']}")
 
-                    dl_choice = Prompt.ask("\nSelect ROM to download (or 0 to cancel)", choices=[str(i) for i in range(len(results) + 1)], default="1")
+                    dl_choice = Prompt.ask("\nSelect ROM to download (or 0 to cancel)", choices=[str(i) for i in range(len(results[:15]) + 1)], default="1")
                     if dl_choice != "0":
                         selected_rom = results[int(dl_choice) - 1]
-                        ok, downloaded_path = ROMDownloader.download_file(selected_rom["url"])
+                        ok, downloaded_path = ROMDownloader.download_rom(selected_rom)
 
                         if ok and Confirm.ask("\nExtract downloaded ROM package to ready-to-flash directory now?"):
                             extract_dir = f"/sdcard/Download/{selected_rom['codename']}_extracted"
