@@ -17,7 +17,6 @@ from rich.prompt import Prompt, Confirm
 fastboot_instance = None
 
 def graceful_exit(signum=None, frame=None):
-    """Graceful exit handler for Ctrl+C / SIGINT"""
     global fastboot_instance
     console.print("\n[bold orange1]\n[!] Interrupt signal received. Exiting safely...[/bold orange1]")
     if fastboot_instance:
@@ -27,7 +26,6 @@ def graceful_exit(signum=None, frame=None):
             pass
     sys.exit(0)
 
-# Register signal handlers
 signal.signal(signal.SIGINT, graceful_exit)
 signal.signal(signal.SIGTERM, graceful_exit)
 
@@ -57,7 +55,6 @@ def main():
                 mode_map = {"1": "flash_all", "2": "flash_all_except_data_storage", "3": "flash_all_lock"}
                 mode = mode_map[mode_choice]
 
-                # ARB Protection Check
                 safe, arb_msg, level = ARBChecker.verify_safety(device["anti"] if device else 1, 1)
                 if not safe:
                     console.print(f"\n[bold red]{arb_msg}[/bold red]")
@@ -106,16 +103,40 @@ def main():
                         console.print("[green]Reboot command sent successfully.[/green]")
 
             elif choice == "2":
-                console.print("[bold white]── Official Xiaomi ROM Downloader ──[/bold white]")
-                query = Prompt.ask("Search device name or codename (e.g. ginkgo, sweet, POCO F5)", default=device.get("product", "ginkgo") if device else "ginkgo")
-                results = ROMDownloader.search_roms(query)
+                console.print("[bold white]── Official Xiaomi ROM Downloader Engine ──[/bold white]")
+                query = Prompt.ask("Search device name or codename", default=device.get("product", "ginkgo") if device else "ginkgo")
+
+                console.print("\n[bold white]Filter Region:[/bold white]")
+                console.print("  [1] All Regions")
+                console.print("  [2] Global (MI)")
+                console.print("  [3] Indonesia (ID)")
+                console.print("  [4] Europe (EEA)")
+                console.print("  [5] India (IN)")
+                console.print("  [6] China (CN)")
+                region_idx = Prompt.ask("Select region", choices=["1", "2", "3", "4", "5", "6"], default="1")
+                region_map = {"1": "All Regions", "2": "Global (MI)", "3": "Indonesia (ID)", "4": "Europe (EEA)", "5": "India (IN)", "6": "China (CN)"}
+                selected_region = region_map[region_idx]
+
+                console.print("\n[bold white]Filter Android Version:[/bold white]")
+                console.print("  [1] All Versions")
+                console.print("  [2] Android 14 (HyperOS)")
+                console.print("  [3] Android 13 (MIUI 14)")
+                console.print("  [4] Android 12 (MIUI 13/14)")
+                console.print("  [5] Android 11 (MIUI 12.5)")
+                android_idx = Prompt.ask("Select Android version", choices=["1", "2", "3", "4", "5"], default="1")
+                android_map = {"1": "All Versions", "2": "Android 14", "3": "Android 13", "4": "Android 12", "5": "Android 11"}
+                selected_android = android_map[android_idx]
+
+                results = ROMDownloader.search_roms(query, region=selected_region, android_ver=selected_android)
 
                 if not results:
-                    console.print("[bold yellow]No ROM packages found matching query.[/bold yellow]")
+                    console.print("\n[bold yellow]No Fastboot ROM packages match the selected criteria.[/bold yellow]")
                 else:
-                    console.print(f"\n[bold cyan]Found {len(results)} ROM Package(s):[/bold cyan]")
+                    console.print(f"\n[bold cyan]Found {len(results)} Fastboot ROM Package(s):[/bold cyan]\n")
                     for idx, r in enumerate(results, start=1):
-                        console.print(f"  [{idx}] [bold white]{r['name']}[/bold white] ({r['codename']}) • [yellow]{r['os']}[/yellow] • Size: {r['size']}")
+                        console.print(f"  [{idx}] [bold white]{r['name']}[/bold white] ({r['codename']})")
+                        console.print(f"      Region  : [green]{r['region']}[/green] • Build: [yellow]{r['version']}[/yellow]")
+                        console.print(f"      OS/Ver  : {r['os']} (Android {r['android']}) • Size: {r['size']}")
 
                     dl_choice = Prompt.ask("\nSelect ROM to download (or 0 to cancel)", choices=[str(i) for i in range(len(results) + 1)], default="1")
                     if dl_choice != "0":
