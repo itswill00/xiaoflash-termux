@@ -14,16 +14,15 @@ class FastbootShell:
         is_simulated = device.get("is_simulated", False) if device else False
         serial = device["serial"] if device else "11bb599a"
 
-        console.print("[dim]Interactive Fastboot OTG Shell initialized.[/dim]")
-        console.print("[dim]Type 'help' for available commands or 'exit' / '0' to return to main menu.[/dim]\n")
+        console.print("[dim]Interactive Fastboot OTG Shell ready.[/dim]")
+        console.print("[dim]Type 'help' for commands or 'exit' / '0' to return.[/dim]\n")
 
         while True:
             try:
-                cmd_input = Prompt.ask("[bold green]fastboot-otg>[/bold green]").strip()
+                cmd_input = Prompt.ask("[bold cyan]fastboot-otg>[/bold cyan]").strip()
                 if not cmd_input:
                     continue
 
-                # Auto-strip leading 'fastboot ' if user typed 'fastboot <command>'
                 if cmd_input.lower().startswith("fastboot "):
                     cmd_input = cmd_input[9:].strip()
 
@@ -34,15 +33,15 @@ class FastbootShell:
                 cmd = args[0].lower()
 
                 if cmd == "help":
-                    console.print("\nAvailable Fastboot Commands:")
-                    console.print("  getvar <var/all>            Read device environment variable(s)")
-                    console.print("  flash <part> <file.img>     Flash image to target partition")
-                    console.print("  erase <part>                Erase specified partition")
+                    console.print("\nAvailable Commands:")
+                    console.print("  getvar <var|all>            Read device variable(s)")
+                    console.print("  flash <part> <file.img>     Flash partition image")
+                    console.print("  erase <part>                Erase partition")
                     console.print("  reboot [bootloader|recovery] Reboot target device")
-                    console.print("  oem <command>               Execute OEM-specific command")
+                    console.print("  oem <command>               Run OEM command")
                     console.print("  flashing <lock|unlock>      Bootloader lock state controls")
-                    console.print("  devices                     Scan and list connected OTG devices")
-                    console.print("  clear                       Clear terminal screen")
+                    console.print("  devices                     List connected USB OTG devices")
+                    console.print("  clear                       Clear screen")
                     console.print("  exit / 0                    Return to main menu\n")
 
                 elif cmd == "clear":
@@ -95,7 +94,7 @@ class FastbootShell:
                         console.print(f"[red]Error: Image file '{img_path}' not found.[/red]")
                         continue
 
-                    console.print(f"Flashing '{img_path}' to partition '{part_name}'...")
+                    console.print(f"Flashing '{img_path}' -> {part_name}...")
                     start_t = time.time()
                     
                     def cb(msg, status):
@@ -147,7 +146,6 @@ class FastbootShell:
                         console.print(f"[bold red]FAIL ({res})[/bold red]")
 
                 else:
-                    # Fallback for raw fastboot command strings
                     if is_simulated:
                         console.print(f"Executing '{cmd_input}'... [bold green]OKAY[/bold green]")
                         continue

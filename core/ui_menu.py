@@ -9,7 +9,8 @@ def clear_screen():
 
 def render_header(device_data=None):
     clear_screen()
-    console.print("[bold white]XiaoFlash 1.0[/bold white] [dim]- Xiaomi Fastboot OTG Tool[/dim]")
+    console.print("[bold white]XiaoFlash 1.0[/bold white] [dim]• Xiaomi Fastboot OTG Utility[/dim]")
+    console.print("[dim]-----------------------------------------------------------------[/dim]")
     
     if device_data and not device_data.get("is_simulated"):
         name = device_data['name']
@@ -20,27 +21,27 @@ def render_header(device_data=None):
         bl = "Unlocked" if device_data['unlocked'] == "yes" else "Locked"
         
         console.print(f"  Target Device : [cyan]{name}[/cyan] ({product})")
-        console.print(f"  USB Connection: [green]Connected via OTG[/green] (Serial: {serial})")
-        console.print(f"  Hardware Info : Bootloader [green]{bl}[/green] • Anti-Rollback [yellow]v{arb}[/yellow] • Battery {batt}")
+        console.print(f"  Connection    : [green]USB OTG[/green] (Serial: {serial})")
+        console.print(f"  Hardware State: Bootloader [green]{bl}[/green] | ARB Index [yellow]v{arb}[/yellow] | Battery {batt}")
     elif device_data and device_data.get("is_simulated"):
-        console.print("  Target Device : Simulation Mode (No USB OTG connected)")
+        console.print("  Target Device : [yellow]Simulation Mode[/yellow] (No physical USB OTG connected)")
     else:
-        console.print("  Target Device : Disconnected (Target must be in Fastboot mode)")
-    console.print("[dim]--------------------------------------------------------------[/dim]")
+        console.print("  Target Device : [dim]No device connected in Fastboot mode[/dim]")
+    console.print("[dim]-----------------------------------------------------------------[/dim]")
 
 def render_section_header(device_data, title):
     render_header(device_data)
-    console.print(f"[bold cyan]-- {title} --[/bold cyan]\n")
+    console.print(f"[bold cyan]:: {title}[/bold cyan]\n")
 
 def show_main_menu():
-    console.print("Options:")
-    console.print("  1. Flash ROM package        [tgz/zip/extracted folder]")
-    console.print("  2. Download Official ROM    [Live MiFirm scraper]")
-    console.print("  3. Root device              [Magisk / KernelSU boot patch]")
-    console.print("  4. Flash single partition   [.img file]")
-    console.print("  5. Reboot device            [System / Bootloader / Recovery]")
-    console.print("  6. Check device info & ARB")
-    console.print("  7. Interactive Fastboot CLI [Run custom fastboot commands]")
+    console.print("Menu Options:")
+    console.print("  1. Flash Fastboot ROM package (.tgz / .tar.gz / folder)")
+    console.print("  2. Download Official ROM (MiFirm scraper)")
+    console.print("  3. Root Device (Magisk / KernelSU boot patcher)")
+    console.print("  4. Flash single partition (.img file)")
+    console.print("  5. Reboot Device (System / Bootloader / Recovery)")
+    console.print("  6. Read Device Info & Anti-Rollback State")
+    console.print("  7. Interactive Fastboot CLI Shell")
     console.print("  0. Exit")
 
-    return Prompt.ask("\nSelect option", choices=["1", "2", "3", "4", "5", "6", "7", "0"], default="1")
+    return Prompt.ask("\nSelect option [0-7]", choices=["1", "2", "3", "4", "5", "6", "7", "0"], default="1")
