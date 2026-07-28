@@ -7,7 +7,7 @@ import shutil
 from core.py_fastboot import PyFastboot
 
 class FastbootOTG:
-    """Fastboot USB-OTG Controller for Termux with PyUSB Engine"""
+    """Enterprise Fastboot USB-OTG Controller for Termux"""
     
     def __init__(self):
         self.py_fb = PyFastboot()
@@ -43,7 +43,7 @@ class FastbootOTG:
 
             return {
                 "serial": serial,
-                "mode": "Fastboot OTG (PyUSB Engine)",
+                "mode": "Fastboot OTG (PyUSB High-Speed Engine)",
                 "product": product,
                 "name": dev_name,
                 "chipset": "Qualcomm / MediaTek",
@@ -71,12 +71,12 @@ class FastbootOTG:
         return "N/A"
 
     def flash_partition(self, serial, partition, img_path, is_simulated=False, callback=None):
-        """Flashes a partition via PyUSB Fastboot OTG"""
+        """Flashes a partition via PyUSB Fastboot OTG with progress tracking"""
         if callback:
             callback(f"Flashing '{partition}' ({os.path.basename(img_path)})...", "process")
 
         if is_simulated:
-            time.sleep(1.0)
+            time.sleep(0.8)
             if callback:
                 callback(f"Flashing '{partition}' OKAY", "success")
             return True, "OKAY"
@@ -88,36 +88,20 @@ class FastbootOTG:
                         callback(f"Image file '{img_path}' not found.", "error")
                     return False, "File missing"
 
-                filesize = os.path.getsize(img_path)
-                hex_size = f"{filesize:08x}"
-
-                # 1. Download command
-                ok, resp = self.py_fb.send_cmd(f"download:{hex_size}")
-                if not ok:
+                def progress_cb(sent, total):
+                    pct = int((sent / total) * 100) if total > 0 else 0
                     if callback:
-                        callback(f"Download init failed '{partition}': {resp}", "error")
-                    return False, resp
+                        callback(f"[{pct}%] Sending '{partition}' payload...", "process")
 
-                # 2. Transfer binary image data
-                with open(img_path, "rb") as f:
-                    chunk_size = 65536
-                    while True:
-                        chunk = f.read(chunk_size)
-                        if not chunk:
-                            break
-                        self.py_fb.ep_out.write(chunk)
-
-                # Read response
-                resp_data = self.py_fb.ep_in.read(512, timeout=10000)
-                resp_str = bytes(resp_data).decode('ascii', errors='ignore')
-
-                if not resp_str.startswith("OKAY"):
+                # 1. Download binary data to target
+                ok_data, resp_data = self.py_fb.send_data(img_path, callback=progress_cb)
+                if not ok_data:
                     if callback:
-                        callback(f"Data download '{partition}' failed: {resp_str}", "error")
-                    return False, resp_str
+                        callback(f"Download stream '{partition}' failed: {resp_data}", "error")
+                    return False, resp_data
 
-                # 3. Flash command
-                ok_flash, resp_flash = self.py_fb.send_cmd(f"flash:{partition}")
+                # 2. Flash partition command
+                ok_flash, resp_flash = self.py_fb.send_cmd(f"flash:{partition}", timeout=60000)
                 if ok_flash:
                     if callback:
                         callback(f"Flashing '{partition}' OKAY", "success")
