@@ -1,5 +1,5 @@
 class ARBChecker:
-    """Anti-Rollback (ARB) Protection Safeguard for Xiaomi Devices"""
+    """Anti-Rollback (ARB) Guard"""
 
     @staticmethod
     def verify_safety(device_arb, rom_arb):
@@ -8,10 +8,9 @@ class ARBChecker:
 
         if rom_arb < device_arb:
             return False, (
-                f"🚨 ARB CRITICAL MISMATCH!\n"
-                f"Device ARB Level: v{device_arb}\n"
-                f"Target ROM ARB  : v{rom_arb}\n"
-                f"Flashing a lower ARB index ROM will permanently HARD BRICK (Deadboot) the device!"
+                f"Warning: Anti-Rollback mismatch.\n"
+                f"Device ARB level is v{device_arb}, but target ROM ARB is v{rom_arb}.\n"
+                f"Flashing a lower ARB version will brick the device."
             ), "CRITICAL"
 
-        return True, f"✅ ARB Safe (Device: v{device_arb} | Target ROM: v{rom_arb})", "SAFE"
+        return True, f"ARB check passed (Device: v{device_arb}, ROM: v{rom_arb})", "SAFE"

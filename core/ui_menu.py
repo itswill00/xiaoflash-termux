@@ -7,30 +7,34 @@ console = Console()
 def render_header(device_data=None):
     os.system("clear" if os.name != "nt" else "cls")
     
-    console.print("[bold white]XiaoFlash[/bold white] [dim]v1.1 • Xiaomi Fastboot OTG & Root Suite[/dim]")
-    console.print("[dim]──────────────────────────────────────────────────────────────[/dim]")
+    console.print("[bold white]XiaoFlash 1.0[/bold white] [dim]- Xiaomi Fastboot OTG Tool[/dim]")
+    console.print("[dim]--------------------------------------------------------------[/dim]")
 
     if device_data and not device_data.get("is_simulated"):
-        target_str = f"[bold cyan]{device_data['name']}[/bold cyan] [dim]({device_data['product']})[/dim] • [yellow]{device_data['serial']}[/yellow]"
-        status_str = f"[green]Fastboot OTG[/green] • BL: [green]Unlocked[/green] • ARB: [bold yellow]v{device_data['anti']}[/bold yellow] • Battery: [dim]{device_data['battery']}[/dim]"
+        name = device_data['name']
+        product = device_data['product']
+        serial = device_data['serial']
+        arb = device_data['anti']
+        batt = device_data['battery']
+        bl_status = "Unlocked" if device_data['unlocked'] == "yes" else "Locked"
         
-        console.print(f"[bold white]Target [/bold white] : {target_str}")
-        console.print(f"[bold white]Status [/bold white] : {status_str}")
+        console.print(f"Device : [bold cyan]{name}[/bold cyan] ({product}) • {serial}")
+        console.print(f"Status : Fastboot OTG • BL: [green]{bl_status}[/green] • ARB: v{arb} • Battery: {batt}")
     elif device_data and device_data.get("is_simulated"):
-        console.print("[bold yellow]Target [/bold yellow] : Simulation Mode (No OTG device connected)")
+        console.print("Device : Simulation mode (No OTG device connected)")
     else:
-        console.print("[bold red]Target [/bold red] : Disconnected (Ensure target device is in Fastboot mode)")
+        console.print("Device : Disconnected (Target must be in Fastboot mode)")
 
-    console.print("[dim]──────────────────────────────────────────────────────────────[/dim]\n")
+    console.print("[dim]--------------------------------------------------------------[/dim]\n")
 
 def show_main_menu():
-    console.print("[bold white]Select Operation:[/bold white]")
-    console.print("  [bold cyan]1.[/bold cyan] Flash Fastboot ROM  [dim](.tgz / .tar.gz / extracted folder)[/dim]")
-    console.print("  [bold cyan]2.[/bold cyan] Download Official ROM [dim](MIUI & HyperOS CDN Downloader)[/dim]")
-    console.print("  [bold cyan]3.[/bold cyan] Root Target Device    [dim](Magisk / KernelSU Boot Patch)[/dim]")
-    console.print("  [bold cyan]4.[/bold cyan] Flash Partition       [dim](.img: boot, recovery, super, etc.)[/dim]")
-    console.print("  [bold cyan]5.[/bold cyan] Rescue & Reboot       [dim](System / Fastboot / Recovery)[/dim]")
-    console.print("  [bold cyan]6.[/bold cyan] Device Info & ARB")
-    console.print("  [bold dim]0. Exit[/bold dim]\n")
+    console.print("Options:")
+    console.print("  1. Flash ROM package (.tgz / folder)")
+    console.print("  2. Download ROM (MiFirm)")
+    console.print("  3. Root device (Magisk / KernelSU)")
+    console.print("  4. Flash single image (.img)")
+    console.print("  5. Reboot device")
+    console.print("  6. Device info & ARB")
+    console.print("  0. Exit\n")
 
-    return Prompt.ask("[bold white]Action[/bold white]", choices=["1", "2", "3", "4", "5", "6", "0"], default="1")
+    return Prompt.ask("Select option", choices=["1", "2", "3", "4", "5", "6", "0"], default="1")
