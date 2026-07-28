@@ -4,6 +4,7 @@ import shutil
 import urllib.request
 import subprocess
 import time
+import socket
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -14,7 +15,7 @@ from core.mifirm_scraper import MiFirmScraper
 console = Console()
 
 class ROMDownloader:
-    """Intelligent Multi-Region Xiaomi ROM Downloader & High-Speed Stream Engine"""
+    """Intelligent Multi-Region Xiaomi ROM Downloader & Resumable Stream Engine"""
 
     @staticmethod
     def get_smart_recommendations(device_info):
@@ -77,49 +78,91 @@ class ROMDownloader:
 
         console.print("\n", Panel(info_table, title="[bold white]📦 Download Specification[/bold white]", border_style="cyan"))
 
-        # 3. Check for aria2c high-speed engine
+        # 3. Priority 1: aria2c (Resumable multi-thread)
         aria2c_bin = shutil.which("aria2c")
         if aria2c_bin:
-            console.print("[bold green]🚀 Downloader Engine: aria2c (16 Parallel Threads)[/bold green]\n")
+            console.print("[bold green]🚀 Downloader Engine: aria2c (16 Parallel Threads & Auto-Resume)[/bold green]\n")
             try:
-                cmd = [aria2c_bin, "-x", "16", "-s", "16", "-k", "1M", "-d", destination_folder, "-o", filename, url]
+                cmd = [aria2c_bin, "-c", "-x", "16", "-s", "16", "-k", "1M", "-d", destination_folder, "-o", filename, url]
                 subprocess.run(cmd, check=True)
                 console.print(f"\n[bold green]✔ Download Complete (aria2c):[/bold green] {dest_path}")
                 return True, dest_path
             except Exception as e:
-                console.print(f"[bold yellow]⚠️ aria2c interrupted, switching to Python High-Speed Stream...[/bold yellow]\n")
+                console.print(f"[bold yellow]⚠️ aria2c interrupted, testing curl engine...[/bold yellow]\n")
 
-        # 4. Rich Python Multi-Column Progress Renderer
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response:
-                total_size = int(response.headers.get('content-length', 0))
+        # 4. Priority 2: curl (Resumable with connection retries)
+        curl_bin = shutil.which("curl")
+        if curl_bin:
+            console.print("[bold green]🚀 Downloader Engine: curl (Resumable + Connection Retry)[/bold green]\n")
+            try:
+                cmd = [curl_bin, "-L", "-C", "-", "--retry", "10", "--retry-delay", "2", "--retry-connrefused", "-o", dest_path, url]
+                subprocess.run(cmd, check=True)
+                console.print(f"\n[bold green]✔ Download Complete (curl):[/bold green] {dest_path}")
+                return True, dest_path
+            except Exception as e:
+                console.print(f"[bold yellow]⚠️ curl interrupted, falling back to Python Resumable Stream...[/bold yellow]\n")
 
-                console.print("[bold cyan]⚡ Downloader Engine: Python High-Speed Stream[/bold cyan]\n")
+        # 5. Priority 3: Python Resumable HTTP Stream Loop (Fixes Errno 103)
+        console.print("[bold cyan]⚡ Downloader Engine: Python Resumable HTTP Stream (Auto-Resume on Socket Drop)[/bold cyan]\n")
+        
+        max_retries = 15
+        retry_count = 0
 
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold cyan]{task.description}"),
-                    BarColumn(bar_width=35),
-                    TaskProgressColumn(),
-                    DownloadColumn(),
-                    TransferSpeedColumn(),
-                    TimeRemainingColumn(),
-                    console=console
-                ) as progress:
-                    task = progress.add_task(filename, total=total_size)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}"),
+            BarColumn(bar_width=35),
+            TaskProgressColumn(),
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            TimeRemainingColumn(),
+            console=console
+        ) as progress:
+            task = None
 
-                    with open(dest_path, 'wb') as out_file:
-                        block_size = 131072  # 128KB buffer
-                        while True:
-                            buffer = response.read(block_size)
-                            if not buffer:
-                                break
-                            out_file.write(buffer)
-                            progress.update(task, advance=len(buffer))
+            while retry_count < max_retries:
+                downloaded_bytes = os.path.getsize(dest_path) if os.path.exists(dest_path) else 0
 
-            console.print(f"\n[bold green]✔ Download Complete:[/bold green] {dest_path}")
-            return True, dest_path
-        except Exception as e:
-            console.print(f"\n[bold red]❌ Download Error:[/bold red] {str(e)}")
-            return False, str(e)
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    if downloaded_bytes > 0:
+                        headers['Range'] = f'bytes={downloaded_bytes}-'
+
+                    req = urllib.request.Request(url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=15) as response:
+                        content_range = response.headers.get('content-range')
+                        if content_range:
+                            total_size = int(content_range.split('/')[-1])
+                        else:
+                            total_size = downloaded_bytes + int(response.headers.get('content-length', 0))
+
+                        if task is None:
+                            task = progress.add_task(filename, total=total_size, completed=downloaded_bytes)
+                        else:
+                            progress.update(task, completed=downloaded_bytes, total=total_size)
+
+                        with open(dest_path, 'ab' if downloaded_bytes > 0 else 'wb') as out_file:
+                            block_size = 131072
+                            while True:
+                                buffer = response.read(block_size)
+                                if not buffer:
+                                    break
+                                out_file.write(buffer)
+                                downloaded_bytes += len(buffer)
+                                progress.update(task, completed=downloaded_bytes)
+
+                        # Download completed cleanly
+                        console.print(f"\n[bold green]✔ Download Complete:[/bold green] {dest_path}")
+                        return True, dest_path
+
+                except (socket.error, urllib.error.URLError, Exception) as e:
+                    retry_count += 1
+                    if downloaded_bytes >= total_size if 'total_size' in locals() and total_size > 0 else False:
+                        console.print(f"\n[bold green]✔ Download Complete:[/bold green] {dest_path}")
+                        return True, dest_path
+
+                    time.sleep(2)
+                    # Loop automatically resumes from downloaded_bytes using HTTP Range header!
+
+        console.print(f"\n[bold red]❌ Download Error after {max_retries} retries.[/bold red]")
+        return False, "Download aborted"
