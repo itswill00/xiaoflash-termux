@@ -15,7 +15,7 @@ from core.mifirm_scraper import MiFirmScraper
 console = Console()
 
 class ROMDownloader:
-    """Intelligent Multi-Region Xiaomi ROM Downloader & Resumable Stream Engine"""
+    """Intelligent Multi-Region Xiaomi ROM Downloader via MiFirm.net Direct Links"""
 
     @staticmethod
     def get_smart_recommendations(device_info):
@@ -23,15 +23,9 @@ class ROMDownloader:
             return None, []
 
         codename = device_info.get("product", "").lower()
-        dev_arb = device_info.get("anti", 1)
 
         console.print(f"[bold cyan]🔍 Fetching live ROM catalog from MiFirm.net for '[yellow]{codename}[/yellow]'...[/bold cyan]")
         live_roms = MiFirmScraper.scrape_model_roms(codename)
-
-        if not live_roms:
-            from core.rom_downloader import MASTER_ROM_CATALOG
-            live_roms = [r for r in MASTER_ROM_CATALOG if r["codename"] == codename]
-
         return codename, live_roms
 
     @staticmethod
@@ -48,20 +42,16 @@ class ROMDownloader:
     def download_rom(rom_item, destination_folder="/sdcard/Download"):
         os.makedirs(destination_folder, exist_ok=True)
         
-        # 1. Resolve live verified CDN URL
-        url = None
-        if "download_id" in rom_item:
-            console.print("[bold cyan]🔗 Resolving live Xiaomi bigota CDN mirror URL via MiFirm API...[/bold cyan]")
-            url = MiFirmScraper.get_verified_cdn_url(rom_item["download_id"], rom_item["version"])
-
-        if not url:
-            url = rom_item.get("url")
+        # Use direct mifirm.net download link
+        url = rom_item.get("mifirm_url") or rom_item.get("url")
+        if not url and "download_id" in rom_item:
+            url = f"https://mifirm.net/download/{rom_item['download_id']}"
 
         if not url:
             console.print("[bold red]❌ Failed to resolve valid download URL for selected ROM.[/bold red]")
             return False, None
 
-        filename = os.path.basename(url)
+        filename = f"{rom_item.get('codename', 'xiaomi')}_{rom_item.get('version', 'ROM')}.tgz"
         dest_path = os.path.join(destination_folder, filename)
 
         # 2. Display Rich Metadata Info Panel
@@ -73,37 +63,37 @@ class ROMDownloader:
         info_table.add_row("Region", f"[bold green]{rom_item.get('region', 'Global')}[/bold green]")
         info_table.add_row("System OS", f"{rom_item.get('os', 'MIUI/HyperOS')}")
         info_table.add_row("File Size", f"[bold yellow]{rom_item.get('size', 'N/A')}[/bold yellow]")
-        info_table.add_row("Verified CDN", f"[dim]{url}[/dim]")
+        info_table.add_row("MiFirm Link", f"[dim]{url}[/dim]")
         info_table.add_row("Destination", f"[yellow]{dest_path}[/yellow]")
 
         console.print("\n", Panel(info_table, title="[bold white]📦 Download Specification[/bold white]", border_style="cyan"))
 
-        # 3. Priority 1: aria2c (Resumable multi-thread)
+        # 3. Priority 1: aria2c (Direct MiFirm download)
         aria2c_bin = shutil.which("aria2c")
         if aria2c_bin:
-            console.print("[bold green]🚀 Downloader Engine: aria2c (16 Parallel Threads & Auto-Resume)[/bold green]\n")
+            console.print("[bold green]🚀 Downloader Engine: aria2c (Direct MiFirm.net Link)[/bold green]\n")
             try:
-                cmd = [aria2c_bin, "-c", "-x", "16", "-s", "16", "-k", "1M", "-d", destination_folder, "-o", filename, url]
+                cmd = [aria2c_bin, "-c", "-x", "16", "-s", "16", "-k", "1M", "--user-agent=Mozilla/5.0", "-d", destination_folder, "-o", filename, url]
                 subprocess.run(cmd, check=True)
                 console.print(f"\n[bold green]✔ Download Complete (aria2c):[/bold green] {dest_path}")
                 return True, dest_path
             except Exception as e:
                 console.print(f"[bold yellow]⚠️ aria2c interrupted, testing curl engine...[/bold yellow]\n")
 
-        # 4. Priority 2: curl (Resumable with connection retries)
+        # 4. Priority 2: curl
         curl_bin = shutil.which("curl")
         if curl_bin:
-            console.print("[bold green]🚀 Downloader Engine: curl (Resumable + Connection Retry)[/bold green]\n")
+            console.print("[bold green]🚀 Downloader Engine: curl (Direct MiFirm.net Link)[/bold green]\n")
             try:
-                cmd = [curl_bin, "-L", "-C", "-", "--retry", "10", "--retry-delay", "2", "--retry-connrefused", "-o", dest_path, url]
+                cmd = [curl_bin, "-L", "-C", "-", "-A", "Mozilla/5.0", "--retry", "10", "--retry-delay", "2", "-o", dest_path, url]
                 subprocess.run(cmd, check=True)
                 console.print(f"\n[bold green]✔ Download Complete (curl):[/bold green] {dest_path}")
                 return True, dest_path
             except Exception as e:
                 console.print(f"[bold yellow]⚠️ curl interrupted, falling back to Python Resumable Stream...[/bold yellow]\n")
 
-        # 5. Priority 3: Python Resumable HTTP Stream Loop (Fixes Errno 103)
-        console.print("[bold cyan]⚡ Downloader Engine: Python Resumable HTTP Stream (Auto-Resume on Socket Drop)[/bold cyan]\n")
+        # 5. Priority 3: Python Stream Loop
+        console.print("[bold cyan]⚡ Downloader Engine: Python Resumable Stream[/bold cyan]\n")
         
         max_retries = 15
         retry_count = 0
@@ -151,18 +141,12 @@ class ROMDownloader:
                                 downloaded_bytes += len(buffer)
                                 progress.update(task, completed=downloaded_bytes)
 
-                        # Download completed cleanly
                         console.print(f"\n[bold green]✔ Download Complete:[/bold green] {dest_path}")
                         return True, dest_path
 
-                except (socket.error, urllib.error.URLError, Exception) as e:
+                except Exception as e:
                     retry_count += 1
-                    if downloaded_bytes >= total_size if 'total_size' in locals() and total_size > 0 else False:
-                        console.print(f"\n[bold green]✔ Download Complete:[/bold green] {dest_path}")
-                        return True, dest_path
-
                     time.sleep(2)
-                    # Loop automatically resumes from downloaded_bytes using HTTP Range header!
 
-        console.print(f"\n[bold red]❌ Download Error after {max_retries} retries.[/bold red]")
+        console.print(f"\n[bold red]❌ Download Error after retries.[/bold red]")
         return False, "Download aborted"
