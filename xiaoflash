@@ -18,7 +18,6 @@ fastboot_instance = None
 
 def graceful_exit(signum=None, frame=None):
     global fastboot_instance
-    console.print("\n[dim]Exiting.[/dim]")
     if fastboot_instance:
         try:
             fastboot_instance.py_fb.dispose()
@@ -40,30 +39,30 @@ def main():
             choice = show_main_menu()
 
             if choice == "1":
-                console.print("\n[bold white]-- Flash ROM Package --[/bold white]")
-                rom_path = Prompt.ask("ROM path (.tgz / .tar.gz / folder)", default="/sdcard/Download/ginkgo_global_images.tgz")
+                console.print("\n-- Flash ROM --")
+                rom_path = Prompt.ask("ROM path", default="/sdcard/Download/ginkgo_global_images.tgz")
 
                 if not os.path.exists(rom_path):
-                    console.print(f"[yellow]Note: '{rom_path}' does not exist on storage.[/yellow]")
+                    console.print(f"Warning: '{rom_path}' not found.")
 
-                console.print("\nMode:")
-                console.print("  1. Clean All (flash_all) - Full wipe [Recommended]")
-                console.print("  2. Save User Data (flash_all_except_storage)")
-                console.print("  3. Clean All & Lock")
+                console.print("\nModes:")
+                console.print("  1. flash_all (Clean install)")
+                console.print("  2. flash_all_except_storage (Save data)")
+                console.print("  3. flash_all_lock (Lock bootloader)")
                 
-                mode_choice = Prompt.ask("Select mode", choices=["1", "2", "3"], default="1")
+                mode_choice = Prompt.ask("Mode", choices=["1", "2", "3"], default="1")
                 mode_map = {"1": "flash_all", "2": "flash_all_except_data_storage", "3": "flash_all_lock"}
                 mode = mode_map[mode_choice]
 
                 safe, arb_msg, level = ARBChecker.verify_safety(device["anti"] if device else 1, 1)
                 if not safe:
-                    console.print(f"\n[red]{arb_msg}[/red]")
-                    input("\nPress Enter to cancel...")
+                    console.print(f"\n{arb_msg}")
+                    input("Press Enter to return...")
                     continue
 
                 dev_name = device["name"] if device else "Target"
-                if Confirm.ask(f"\nFlash {mode} to {dev_name}?"):
-                    console.print(f"\n[cyan]Flashing {mode}...[/cyan]\n")
+                if Confirm.ask(f"Flash {mode} to {dev_name}?"):
+                    console.print(f"\nFlashing {mode}...")
 
                     partitions = [
                         ("gpt", "gpt.bin"),
@@ -83,59 +82,56 @@ def main():
                     total = len(partitions)
                     for idx, (part_name, img_name) in enumerate(partitions, start=1):
                         if mode == "flash_all_except_data_storage" and part_name == "userdata":
-                            console.print(f"[dim][{idx}/{total}] Skip {part_name}[/dim]")
+                            console.print(f"[{idx}/{total}] Skip {part_name}")
                             continue
 
                         def log_cb(msg, status):
                             if status == "process":
-                                sys.stdout.write(f"\r[{idx}/{total}] {part_name:<12} • {msg}")
+                                sys.stdout.write(f"\r[{idx}/{total}] {part_name:<12} {msg}")
                                 sys.stdout.flush()
                             elif status == "success":
-                                console.print(f"\r[{idx}/{total}] {part_name:<12} • [green]OKAY[/green]")
+                                console.print(f"\r[{idx}/{total}] {part_name:<12} OKAY")
                             elif status == "error":
-                                console.print(f"\r[{idx}/{total}] {part_name:<12} • [red]FAIL ({msg})[/red]")
+                                console.print(f"\r[{idx}/{total}] {part_name:<12} FAIL ({msg})")
 
                         fastboot_instance.flash_partition(serial, part_name, img_name, is_simulated=is_simulated, callback=log_cb)
 
-                    console.print("\n[green]Flashing completed successfully.[/green]")
-                    if Confirm.ask("Reboot device now?"):
+                    console.print("\nFlashing finished.")
+                    if Confirm.ask("Reboot device?"):
                         fastboot_instance.reboot(serial, "system", is_simulated=is_simulated)
-                        console.print("[green]Reboot command sent.[/green]")
 
             elif choice == "2":
-                console.print("\n[bold white]-- Download ROM --[/bold white]")
+                console.print("\n-- Download ROM --")
 
                 detected_code, smart_roms = ROMDownloader.get_smart_recommendations(device)
 
                 if detected_code and smart_roms:
                     results = smart_roms
                 else:
-                    query = Prompt.ask("Search model or codename", default="ginkgo")
+                    query = Prompt.ask("Search codename/model", default="ginkgo")
                     results = ROMDownloader.search_roms(query)
 
                 if not results:
-                    console.print("\n[yellow]No ROMs found.[/yellow]")
+                    console.print("No ROMs found.")
                 else:
-                    console.print(f"\nAvailable ROMs ({len(results)} found):\n")
+                    console.print(f"\nFound {len(results)} ROMs:\n")
                     for idx, r in enumerate(results[:15], start=1):
-                        console.print(f"  [{idx}] {r['version']}")
-                        console.print(f"      Region: {r['region']} • OS: {r['os']} • Size: {r['size']}")
+                        console.print(f"  {idx}. {r['version']} | {r['region']} | {r['os']} | {r['size']}")
 
-                    dl_choice = Prompt.ask("\nSelect ROM to download (0 to cancel)", choices=[str(i) for i in range(len(results[:15]) + 1)], default="1")
+                    dl_choice = Prompt.ask("\nSelect index (0 to cancel)", choices=[str(i) for i in range(len(results[:15]) + 1)], default="1")
                     if dl_choice != "0":
                         selected_rom = results[int(dl_choice) - 1]
                         ok, downloaded_path = ROMDownloader.download_rom(selected_rom)
 
-                        if ok and Confirm.ask("\nExtract downloaded ROM archive now?"):
+                        if ok and Confirm.ask("Extract downloaded ROM now?"):
                             extract_dir = f"/sdcard/Download/{selected_rom['codename']}_extracted"
-                            console.print(f"\nExtracting to '{extract_dir}'...")
+                            console.print(f"Extracting to '{extract_dir}'...")
                             ROMExtractor.extract_rom(downloaded_path, extract_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
-                            console.print("\n[green]Extraction complete.[/green]")
 
             elif choice == "3":
-                console.print("\n[bold white]-- Root Device --[/bold white]")
-                boot_path = Prompt.ask("Path to boot.img", default="/sdcard/Download/boot.img")
-                root_type = Prompt.ask("Root method", choices=["magisk", "kernelsu"], default="magisk")
+                console.print("\n-- Root Device --")
+                boot_path = Prompt.ask("Boot image path", default="/sdcard/Download/boot.img")
+                root_type = Prompt.ask("Method", choices=["magisk", "kernelsu"], default="magisk")
 
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
@@ -144,27 +140,27 @@ def main():
                     BootPatcher.patch_and_flash(fastboot_instance, serial, boot_path, root_type=root_type, is_simulated=is_simulated)
 
             elif choice == "4":
-                console.print("\n[bold white]-- Flash Single Image --[/bold white]")
-                partition = Prompt.ask("Partition name", default="boot")
+                console.print("\n-- Flash Image --")
+                partition = Prompt.ask("Partition", default="boot")
                 img_path = Prompt.ask("Image path", default="/sdcard/Download/boot.img")
 
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
 
-                if Confirm.ask(f"Flash '{img_path}' to {partition}?"):
+                if Confirm.ask(f"Flash '{img_path}' -> {partition}?"):
                     def cb(m, s):
                         if s == "success":
-                            console.print(f"[green]{partition} OKAY[/green]")
+                            console.print(f"{partition} OKAY")
                         elif s == "error":
-                            console.print(f"[red]{partition} FAIL: {m}[/red]")
+                            console.print(f"{partition} FAIL: {m}")
                     fastboot_instance.flash_partition(serial, partition, img_path, is_simulated=is_simulated, callback=cb)
 
             elif choice == "5":
-                console.print("\n[bold white]-- Reboot Device --[/bold white]")
+                console.print("\n-- Reboot --")
                 console.print("  1. System")
-                console.print("  2. Fastboot / Bootloader")
+                console.print("  2. Bootloader")
                 console.print("  3. Recovery")
-                res_c = Prompt.ask("Reboot target", choices=["1", "2", "3"], default="1")
+                res_c = Prompt.ask("Target", choices=["1", "2", "3"], default="1")
                 
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
@@ -172,24 +168,23 @@ def main():
 
                 ok, res_out = fastboot_instance.reboot(serial, target_map[res_c], is_simulated=is_simulated)
                 if ok:
-                    console.print("[green]Reboot command sent.[/green]")
+                    console.print("Reboot OK")
                 else:
-                    console.print(f"[red]Reboot failed: {res_out}[/red]")
+                    console.print(f"Reboot failed: {res_out}")
 
             elif choice == "6":
-                console.print("\n[bold white]-- Device Info --[/bold white]")
+                console.print("\n-- Device Info --")
                 if device:
-                    console.print(f"  Model      : {device['name']} ({device['product']})")
-                    console.print(f"  Serial     : {device['serial']}")
-                    console.print(f"  Anti-Roll  : v{device['anti']}")
-                    console.print(f"  Bootloader : {device['unlocked'].upper()}")
-                    console.print(f"  Battery    : {device['battery']}")
+                    console.print(f"  Name      : {device['name']} ({device['product']})")
+                    console.print(f"  Serial    : {device['serial']}")
+                    console.print(f"  Anti-Roll : v{device['anti']}")
+                    console.print(f"  Bootloader: {device['unlocked'].upper()}")
+                    console.print(f"  Battery   : {device['battery']}")
 
             elif choice == "0":
-                console.print("[dim]Goodbye.[/dim]")
                 graceful_exit()
 
-            input("\nPress Enter to continue...")
+            input("\nPress Enter...")
             device, msg = fastboot_instance.scan_devices()
 
         except (KeyboardInterrupt, EOFError):
