@@ -23,6 +23,10 @@ class FastbootShell:
                 if not cmd_input:
                     continue
 
+                # Auto-strip leading 'fastboot ' if user typed 'fastboot <command>'
+                if cmd_input.lower().startswith("fastboot "):
+                    cmd_input = cmd_input[9:].strip()
+
                 if cmd_input.lower() in ("exit", "quit", "0", "back", "q"):
                     break
 
@@ -44,9 +48,12 @@ class FastbootShell:
                 elif cmd == "clear":
                     os.system("clear" if os.name != "nt" else "cls")
 
-                elif cmd == "devices":
+                elif cmd in ("devices", "device"):
                     dev_data, msg = fastboot_instance.scan_devices()
-                    console.print(f"  {dev_data['serial']}\t{dev_data['mode']} ({dev_data['name']})")
+                    if dev_data and not dev_data.get("is_simulated"):
+                        console.print(f"  {dev_data['serial']}\tfastboot ({dev_data['name']})")
+                    else:
+                        console.print(f"  {serial}\tfastboot (Simulated / OTG)")
 
                 elif cmd == "getvar":
                     if len(args) < 2:
@@ -55,7 +62,7 @@ class FastbootShell:
                     
                     var_name = args[1]
                     if is_simulated:
-                        console.print(f"  {var_name}: [cyan]simulated_ok[/cyan]")
+                        console.print(f"  (bootloader) {var_name}: simulated_ok")
                         continue
 
                     if var_name.lower() == "all":
