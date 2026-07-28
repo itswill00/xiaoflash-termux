@@ -3,8 +3,18 @@ import os
 import sys
 import time
 import signal
+import shutil
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Auto Root Elevation check inside Python entrypoint
+if os.geteuid() != 0:
+    su_bin = shutil.which("su") or "/system/bin/su"
+    if os.path.exists(su_bin):
+        script_file = os.path.abspath(__file__)
+        args_str = " ".join(f'"{a}"' for a in sys.argv[1:])
+        cmd = f"export PATH=/data/data/com.termux/files/usr/bin:$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; python3 \"{script_file}\" {args_str}".strip()
+        os.execv(su_bin, [su_bin, "-c", cmd])
 
 from core.fastboot_otg import FastbootOTG
 from core.arb_checker import ARBChecker

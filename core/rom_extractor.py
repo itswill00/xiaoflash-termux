@@ -79,23 +79,29 @@ class ROMExtractor:
         partitions = []
 
         if script_path:
+            script_dir = os.path.dirname(script_path)
             console.print(f"Parsing Xiaomi flash script: [cyan]{os.path.basename(script_path)}[/cyan]")
             with open(script_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
                 for line in lines:
                     line = line.strip()
                     if "fastboot" in line and "flash" in line and not line.startswith("echo") and not line.startswith("::") and not line.startswith("#"):
-                        match = re.search(r"fastboot\s+(?:[^\s]+\s+)*flash\s+([^\s]+)\s+([^\s\|;&]+)", line)
+                        # Pre-clean `dirname $0` and %~dp0 prefixes
+                        clean_line = re.sub(r'(`?dirname\s+\$0`?[/\\]*|%~dp0[/\\]*|"`?dirname\s+\$0`?[/\\]*")', '', line, flags=re.IGNORECASE)
+                        match = re.search(r"fastboot\s+(?:[^\s]+\s+)*flash\s+([^\s]+)\s+([^\s\|;&]+)", clean_line)
                         if match:
                             part_name = match.group(1)
-                            img_file = match.group(2).replace("%~dp0", "").replace("`", "").replace("\"", "").replace("'", "")
-                            img_file = img_file.replace("\\", "/")
-                            
-                            # Resolve full image path relative to script_path
-                            img_full_path = img_file if os.path.isabs(img_file) else os.path.join(os.path.dirname(script_path), img_file)
+                            img_file = match.group(2).replace("`", "").replace('"', '').replace("'", "").replace("\\", "/").strip()
+
+                            # Ensure absolute path resolution
+                            img_full = img_file if os.path.isabs(img_file) else os.path.join(script_dir, img_file)
+                            if not os.path.exists(img_full):
+                                alt_path = os.path.join(script_dir, "images", os.path.basename(img_file))
+                                if os.path.exists(alt_path):
+                                    img_full = alt_path
 
                             if not part_name.startswith("$") and not part_name.startswith("%") and not part_name.startswith("gpt_"):
-                                partitions.append((part_name, img_full_path))
+                                partitions.append((part_name, img_full))
 
         if not partitions:
             img_dir = os.path.join(images_dir, "images") if os.path.exists(os.path.join(images_dir, "images")) else images_dir
