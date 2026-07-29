@@ -8,7 +8,7 @@ from core.py_fastboot import PyFastboot
 from core.sparse_splitter import SparseSplitter
 
 class FastbootOTG:
-    """Fastboot USB-OTG Controller with Dual-Engine (Native C++ Fastboot + PyUSB Fallback)"""
+    """Fastboot USB-OTG Controller with High-Speed C++ Engine and PyUSB Fallback"""
     
     def __init__(self):
         self.py_fb = PyFastboot()
@@ -18,7 +18,8 @@ class FastbootOTG:
 
     def scan_devices(self):
         """Scans devices connected via USB OTG in Fastboot mode"""
-        # Try native fastboot binary scan first under su
+        self.py_fb.dispose()
+
         if os.path.exists(self.fastboot_bin):
             try:
                 env = dict(os.environ)
@@ -91,9 +92,11 @@ class FastbootOTG:
         return "N/A"
 
     def erase_partition(self, serial, partition, is_simulated=False):
-        """Erases a partition via Fastboot OTG (erases stale bootloader flags like misc/ddr/apdp)"""
+        """Erases a partition via Fastboot OTG (clears stale bootloader flags like misc/ddr/apdp)"""
         if is_simulated:
             return True, "OKAY"
+
+        self.py_fb.dispose()
 
         if os.path.exists(self.fastboot_bin):
             try:
@@ -110,13 +113,10 @@ class FastbootOTG:
             except Exception:
                 pass
 
-        if self.is_pyusb_active:
-            return self.py_fb.send_command(f"erase:{partition}")
-
-        return False, "OTG driver not active"
+        return self.py_fb.send_command(f"erase:{partition}")
 
     def flash_partition(self, serial, partition, img_path, is_simulated=False, callback=None):
-        """Flashes a partition via OTG with C++ Fastboot Engine and PyUSB Fallback"""
+        """Flashes a partition via OTG with high-speed C++ Fastboot Engine and PyUSB Fallback"""
         if not os.path.exists(img_path):
             if callback:
                 callback(f"Image file '{img_path}' not found.", "error")
@@ -128,7 +128,10 @@ class FastbootOTG:
                 callback(f"Flashing '{partition}' OKAY", "success")
             return True, "OKAY"
 
-        # Priority 1: Official Android C++ fastboot binary under su (prevents sparse header corruption & bootloop)
+        # Dispose Python USB handles so C++ binary gets instant exclusive USB access
+        self.py_fb.dispose()
+
+        # Priority 1: High-Speed Android C++ Fastboot Binary under su
         if os.path.exists(self.fastboot_bin):
             try:
                 cmd = [self.fastboot_bin, "-s", serial, "flash", partition, img_path]
@@ -136,9 +139,6 @@ class FastbootOTG:
                 env["PATH"] = f"/data/data/com.termux/files/usr/bin:{env.get('PATH', '')}"
                 env["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib"
                 
-                if callback:
-                    callback(f"Flashing '{partition}' via C++ Fastboot Engine...", "process")
-
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
                 stdout, stderr = proc.communicate()
                 out_combined = (stdout + "\n" + stderr).strip()
@@ -151,7 +151,8 @@ class FastbootOTG:
                 pass
 
         # Priority 2: PyUSB Fastboot Driver Fallback
-        if self.is_pyusb_active:
+        ok, _ = self.py_fb.connect()
+        if ok:
             try:
                 max_dl_str = self.py_fb.getvar("max-download-size")
                 max_dl = 300 * 1024 * 1024
@@ -212,6 +213,8 @@ class FastbootOTG:
         if is_simulated:
             return True, f"Simulated reboot to {target}"
             
+        self.py_fb.dispose()
+
         if os.path.exists(self.fastboot_bin):
             try:
                 target_cmd = "reboot-bootloader" if target == "bootloader" else ("reboot-recovery" if target == "recovery" else "reboot")
