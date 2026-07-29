@@ -52,7 +52,6 @@ class ROMExtractor:
 
     @staticmethod
     def parse_flash_script(images_dir, mode="flash_all"):
-        # Auto-detect nested subdirectory containing flash_all.sh / flash_all.bat
         if os.path.exists(images_dir):
             script_candidates = [f"{mode}.sh", f"{mode}.bat"]
             has_script = any(os.path.exists(os.path.join(images_dir, c)) for c in script_candidates)
@@ -76,7 +75,7 @@ class ROMExtractor:
                 script_path = sp
                 break
 
-        partitions = []
+        actions = []
 
         if script_path:
             script_dir = os.path.dirname(script_path)
@@ -85,25 +84,34 @@ class ROMExtractor:
                 lines = f.readlines()
                 for line in lines:
                     line = line.strip()
-                    if "fastboot" in line and "flash" in line and not line.startswith("echo") and not line.startswith("::") and not line.startswith("#"):
-                        # Pre-clean `dirname $0` and %~dp0 prefixes
+                    if "fastboot" in line and not line.startswith("echo") and not line.startswith("::") and not line.startswith("#"):
                         clean_line = re.sub(r'(`?dirname\s+\$0`?[/\\]*|%~dp0[/\\]*|"`?dirname\s+\$0`?[/\\]*")', '', line, flags=re.IGNORECASE)
-                        match = re.search(r"fastboot\s+(?:[^\s]+\s+)*flash\s+([^\s]+)\s+([^\s\|;&]+)", clean_line)
-                        if match:
-                            part_name = match.group(1)
-                            img_file = match.group(2).replace("`", "").replace('"', '').replace("'", "").replace("\\", "/").strip()
+                        
+                        # Match flash action
+                        if " flash " in line:
+                            match = re.search(r"fastboot\s+(?:[^\s]+\s+)*flash\s+([^\s]+)\s+([^\s\|;&]+)", clean_line)
+                            if match:
+                                part_name = match.group(1)
+                                img_file = match.group(2).replace("`", "").replace('"', '').replace("'", "").replace("\\", "/").strip()
 
-                            # Ensure absolute path resolution
-                            img_full = img_file if os.path.isabs(img_file) else os.path.join(script_dir, img_file)
-                            if not os.path.exists(img_full):
-                                alt_path = os.path.join(script_dir, "images", os.path.basename(img_file))
-                                if os.path.exists(alt_path):
-                                    img_full = alt_path
+                                img_full = img_file if os.path.isabs(img_file) else os.path.join(script_dir, img_file)
+                                if not os.path.exists(img_full):
+                                    alt_path = os.path.join(script_dir, "images", os.path.basename(img_file))
+                                    if os.path.exists(alt_path):
+                                        img_full = alt_path
 
-                            if not part_name.startswith("$") and not part_name.startswith("%") and not part_name.startswith("gpt_"):
-                                partitions.append((part_name, img_full))
+                                if not part_name.startswith("$") and not part_name.startswith("%") and not part_name.startswith("gpt_"):
+                                    actions.append(("flash", part_name, img_full))
 
-        if not partitions:
+                        # Match erase action
+                        elif " erase " in line:
+                            match = re.search(r"fastboot\s+(?:[^\s]+\s+)*erase\s+([^\s\|;&]+)", clean_line)
+                            if match:
+                                part_name = match.group(1)
+                                if not part_name.startswith("$") and not part_name.startswith("%"):
+                                    actions.append(("erase", part_name, None))
+
+        if not actions:
             img_dir = os.path.join(images_dir, "images") if os.path.exists(os.path.join(images_dir, "images")) else images_dir
             if os.path.exists(img_dir):
                 console.print(f"Scanning image directory: [cyan]{img_dir}[/cyan]")
@@ -112,9 +120,9 @@ class ROMExtractor:
                     full_p = os.path.join(img_dir, item)
                     if os.path.exists(full_p):
                         part_name = item.replace(".img", "").replace(".bin", "")
-                        partitions.append((part_name, full_p))
+                        actions.append(("flash", part_name, full_p))
 
-        if partitions:
-            console.print(f"Parsed [green]{len(partitions)}[/green] partition image(s) for flashing.")
+        if actions:
+            console.print(f"Parsed [green]{len(actions)}[/green] flash & erase actions for sequence.")
 
-        return partitions
+        return actions
