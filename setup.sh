@@ -23,20 +23,20 @@ SCRIPT_PATH="$SCRIPT_DIR/xiaoflash"
 
 chmod +x "$SCRIPT_PATH"
 
-cat << 'EOF' > "$LAUNCHER_PATH"
+cat << EOF > "$LAUNCHER_PATH"
 #!/data/data/com.termux/files/usr/bin/bash
-TARGET_SCRIPT="/data/data/com.termux/files/home/xiaoflash-termux/xiaoflash"
+TARGET_SCRIPT="$SCRIPT_PATH"
 
-if [ ! -f "$TARGET_SCRIPT" ]; then
-    TARGET_SCRIPT="$(find /data/data/com.termux/files/home -name "xiaoflash" -type f | head -n 1)"
+if [ ! -f "\$TARGET_SCRIPT" ]; then
+    TARGET_SCRIPT="\$(find /data/data/com.termux/files/home -name "xiaoflash" -type f | head -n 1)"
 fi
 
-if [ "$(id -u)" -ne 0 ]; then
-    su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; python3 $TARGET_SCRIPT \"\$@\""
+if [ "\$(id -u)" -ne 0 ]; then
+    su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; python3 \$TARGET_SCRIPT \"\$@\""
 else
-    export PATH=/data/data/com.termux/files/usr/bin:$PATH
+    export PATH=/data/data/com.termux/files/usr/bin:\$PATH
     export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib
-    python3 "$TARGET_SCRIPT" "$@"
+    python3 "\$TARGET_SCRIPT" "\$@"
 fi
 EOF
 
