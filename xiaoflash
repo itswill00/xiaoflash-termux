@@ -50,6 +50,38 @@ def format_size(bytes_val):
     else:
         return f"{bytes_val / (1024 * 1024 * 1024):.2f} GB"
 
+def check_device_connection(fb_inst):
+    """Rescans USB OTG bus dynamically and offers 1-click rescan if in simulation mode"""
+    device, msg = fb_inst.scan_devices()
+    if device and not device.get("is_simulated"):
+        return device, True
+
+    render_header(device)
+    console.print("[yellow]Notice: Target device is in Simulation Mode (No physical USB OTG detected).[/yellow]")
+    console.print("[dim]Please ensure target phone is connected via OTG cable and powered on in Fastboot or Recovery mode.[/dim]\n")
+
+    opts = [
+        ("rescan", "🔄 Rescan USB OTG Connection", "Scan USB OTG bus again"),
+        ("sim", "⚡ Proceed in Simulation Mode", "Testing / Dry run mode"),
+        ("0", "0. Back to Main Menu", "")
+    ]
+
+    choice = TUIEngine.select_option(opts, header_render_fn=lambda: render_header(device), title="USB OTG Connection Check")
+    if choice == "rescan":
+        device, msg = fb_inst.scan_devices()
+        if device and not device.get("is_simulated"):
+            console.print(f"\n[bold green]Device Detected: {device['name']} ({device['serial']})[/bold green]")
+            time.sleep(1)
+            return device, True
+        else:
+            console.print("\n[yellow]Still no physical USB OTG device detected.[/yellow]")
+            Prompt.ask("\nPress Enter to continue", default="")
+            return device, False
+    elif choice == "sim":
+        return device, False
+    else:
+        return None, False
+
 def main():
     global fastboot_instance
     fastboot_instance = FastbootOTG()
@@ -60,6 +92,10 @@ def main():
             choice = show_main_menu(device)
 
             if choice == "1":
+                device, is_real = check_device_connection(fastboot_instance)
+                if device is None:
+                    continue
+
                 rom_picker_opts = [
                     ("browse_file", "📁 Browse ROM Package File (.tgz / .tar.gz / .zip)", "Interactive File Picker"),
                     ("browse_dir", "📁 Browse Extracted ROM Directory", "Interactive Folder Picker"),
@@ -236,6 +272,10 @@ def main():
                             ROMExtractor.extract_rom(downloaded_path, extract_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
 
             elif choice == "3":
+                device, is_real = check_device_connection(fastboot_instance)
+                if device is None:
+                    continue
+
                 root_picker_opts = [
                     ("browse", "📁 Browse Boot Image File (.img)", "Interactive File Picker"),
                     ("manual", "✍️ Type Boot Image Path Manually", "Text prompt"),
@@ -273,6 +313,10 @@ def main():
                     BootPatcher.patch_and_flash(fastboot_instance, serial, boot_path, root_type=root_type, is_simulated=is_simulated)
 
             elif choice == "4":
+                device, is_real = check_device_connection(fastboot_instance)
+                if device is None:
+                    continue
+
                 part_opts = [
                     ("recovery", "recovery", "Recovery Partition (TWRP / OrangeFox / Stock)"),
                     ("boot", "boot", "Boot Partition (Kernel / Root)"),
@@ -319,6 +363,10 @@ def main():
                         console.print(f"\n[bold red]FAIL: Flashing '{partition}' failed ({err_p}).[/bold red]")
 
             elif choice == "5":
+                device, is_real = check_device_connection(fastboot_instance)
+                if device is None:
+                    continue
+
                 reboot_opts = [
                     ("1", "System", "Normal reboot into Android OS"),
                     ("2", "Bootloader / Fastboot", "Reboot target into Fastboot mode"),
@@ -341,6 +389,7 @@ def main():
                     console.print(f"\n[red]Reboot failed: {res_out}[/red]")
 
             elif choice == "6":
+                device, msg = fastboot_instance.scan_devices()
                 render_section_header(device, "Device Info & Security")
                 if device:
                     console.print(f"  Model        : [cyan]{device['name']}[/cyan] ({device['product']})")
@@ -354,10 +403,15 @@ def main():
                         console.print(f"  MIUI/OS Ver  : [yellow]{device['miui_ver']}[/yellow]")
 
             elif choice == "7":
+                device, is_real = check_device_connection(fastboot_instance)
                 render_section_header(device, "Interactive Fastboot CLI Shell")
                 FastbootShell.run_interactive_shell(fastboot_instance, device)
 
             elif choice == "8":
+                device, is_real = check_device_connection(fastboot_instance)
+                if device is None:
+                    continue
+
                 adb_opts = [
                     ("1", "Reboot to Fastboot Mode", "adb reboot bootloader"),
                     ("2", "Reboot to Recovery Mode", "adb reboot recovery"),
@@ -395,7 +449,11 @@ def main():
                                 fastboot_instance.reboot(serial, "recovery", is_simulated=is_simulated)
                                 Prompt.ask("\nIn TWRP/Recovery on target device, go to 'Advanced -> ADB Sideload' and swipe to start, then press Enter here", default="")
 
-                        fastboot_instance.adb_ctrl.sideload(serial, zip_p, callback=lambda m, s: console.print(f"[{s}] {m}"))
+                        # Execute Sideload
+                        if not is_simulated:
+                            fastboot_instance.adb_ctrl.sideload(serial, zip_p, callback=lambda m, s: console.print(f"[{s}] {m}"))
+                        else:
+                            console.print("\n[yellow]Simulated Sideload Completed OKAY[/yellow]")
                     elif zip_p:
                         console.print(f"[red]Error: ZIP file '{zip_p}' missing.[/red]")
 
