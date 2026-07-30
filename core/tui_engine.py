@@ -16,7 +16,6 @@ class TUIEngine:
         try:
             old_settings = termios.tcgetattr(fd)
         except Exception:
-            # Non-tty fallback
             ch = sys.stdin.read(1)
             return ch
 
@@ -24,7 +23,6 @@ class TUIEngine:
             tty.setraw(fd)
             ch = sys.stdin.read(1)
             if ch == '\x1b':
-                # Read escape sequence
                 ch2 = sys.stdin.read(1)
                 if ch2 == '[':
                     ch3 = sys.stdin.read(1)
@@ -56,32 +54,37 @@ class TUIEngine:
 
     @staticmethod
     def select_option(options, header_render_fn=None, title="Select Option"):
-        """Interactive arrow key menu selector"""
+        """Interactive arrow key menu selector with clean natural cursor"""
         current_idx = 0
         total_items = len(options)
 
         while True:
+            sys.stdout.write("\033[H\033[2J")
+            sys.stdout.flush()
+
             if header_render_fn:
                 header_render_fn()
             else:
-                os.system("clear" if os.name != "nt" else "cls")
                 console.print(f"[bold cyan]:: {title}[/bold cyan]\n")
 
-            console.print("[dim]Use UP/DOWN (↑/↓) arrow keys to navigate • ENTER to select • '0'/ESC to back[/dim]\n")
+            console.print("[dim]Use ↑/↓ arrow keys to navigate • ENTER to select • '0'/ESC to back[/dim]\n")
 
             for idx, item in enumerate(options):
-                # item can be tuple (key, label, desc) or str
                 if isinstance(item, tuple):
                     key, label, desc = item[0], item[1], item[2] if len(item) > 2 else ""
-                    display_text = f"{label:<36} [dim]{desc}[/dim]" if desc else label
+                    if desc:
+                        display_text = f"{label:<38} [dim]{desc}[/dim]"
+                    else:
+                        display_text = label
                 else:
                     display_text = str(item)
 
                 if idx == current_idx:
-                    console.print(f" [bold white on blue] > {display_text} [/bold white on blue]")
+                    console.print(f" [bold cyan]▸[/bold cyan] [bold white]{display_text}[/bold white]")
                 else:
-                    console.print(f"   {display_text}")
+                    console.print(f"   [dim]{display_text}[/dim]")
 
+            console.print("")
             key = TUIEngine.get_key()
 
             if key == 'UP':
@@ -96,7 +99,7 @@ class TUIEngine:
 
     @staticmethod
     def file_browser(start_dir="/sdcard/Download", allowed_exts=None, select_dir_mode=False, header_render_fn=None, title="Select File"):
-        """Interactive Arrow-Key File & Folder Picker"""
+        """Interactive Arrow-Key File & Folder Picker with Unix File Manager Style"""
         current_dir = start_dir
         if not os.path.exists(current_dir):
             current_dir = "/storage/emulated/0"
@@ -111,7 +114,6 @@ class TUIEngine:
             except Exception:
                 entries = []
 
-            # Filter folders and files
             folders = []
             files = []
 
@@ -127,13 +129,13 @@ class TUIEngine:
 
             items = []
             if current_dir != "/" and current_dir != "/storage/emulated/0":
-                items.append(("..", "[Parent Directory]", True))
+                items.append(("..", "[UP]   ..", "Parent Directory", True))
 
             if select_dir_mode:
-                items.append((".", "[SELECT THIS CURRENT FOLDER]", True))
+                items.append((".", "[SEL]  . ", "Select Current Directory", True))
 
             for f in folders:
-                items.append((f, f"📁 {f}/", True))
+                items.append((f, f"[DIR]  {f}/", "Directory", True))
 
             for fi in files:
                 full_fi = os.path.join(current_dir, fi)
@@ -148,24 +150,25 @@ class TUIEngine:
                 except:
                     sz_str = ""
 
-                items.append((fi, f"📄 {fi:<32} [dim]({sz_str})[/dim]", False))
+                items.append((fi, f"[FILE] {fi}", sz_str, False))
 
             if not items:
-                items.append(("..", "[Empty Directory - Go Back]", True))
+                items.append(("..", "[EMPTY] Empty Directory", "", True))
 
             if cursor_idx >= len(items):
                 cursor_idx = max(0, len(items) - 1)
 
+            sys.stdout.write("\033[H\033[2J")
+            sys.stdout.flush()
+
             if header_render_fn:
                 header_render_fn()
             else:
-                os.system("clear" if os.name != "nt" else "cls")
                 console.print(f"[bold cyan]:: {title}[/bold cyan]\n")
 
-            console.print(f"  Current Path: [yellow]{current_dir}[/yellow]")
+            console.print(f"  Path: [yellow]{current_dir}[/yellow]")
             console.print("[dim]Use ↑/↓ to move • RIGHT/ENTER to open/select • LEFT to go up • '0'/ESC to cancel[/dim]\n")
 
-            # Window scrolling for long file lists
             window_size = 12
             start_win = max(0, cursor_idx - window_size // 2)
             end_win = min(len(items), start_win + window_size)
@@ -173,16 +176,23 @@ class TUIEngine:
                 start_win = max(0, end_win - window_size)
 
             for idx in range(start_win, end_win):
-                raw_name, display_label, is_dir = items[idx]
+                raw_name, display_label, sz_desc, is_dir = items[idx]
 
                 if idx == cursor_idx:
-                    console.print(f" [bold white on blue] > {display_label} [/bold white on blue]")
+                    if is_dir:
+                        console.print(f" [bold cyan]▸[/bold cyan] [bold cyan]{display_label:<42}[/bold cyan] [dim]{sz_desc}[/dim]")
+                    else:
+                        console.print(f" [bold cyan]▸[/bold cyan] [bold green]{display_label:<42}[/bold green] [bold yellow]{sz_desc:>10}[/bold yellow]")
                 else:
-                    console.print(f"   {display_label}")
+                    if is_dir:
+                        console.print(f"   [dim cyan]{display_label:<42}[/dim cyan] [dim]{sz_desc}[/dim]")
+                    else:
+                        console.print(f"   [dim]{display_label:<42} {sz_desc:>10}[/dim]")
 
             if len(items) > window_size:
-                console.print(f"\n[dim]-- Showing items {start_win+1}-{end_win} of {len(items)} --[/dim]")
+                console.print(f"\n[dim]-- Items {start_win+1}-{end_win} of {len(items)} --[/dim]")
 
+            console.print("")
             key = TUIEngine.get_key()
 
             if key == 'UP':
@@ -190,7 +200,7 @@ class TUIEngine:
             elif key == 'DOWN':
                 cursor_idx = (cursor_idx + 1) % len(items)
             elif key in ('RIGHT', 'ENTER', 'SPACE'):
-                raw_name, display_label, is_dir = items[cursor_idx]
+                raw_name, display_label, sz_desc, is_dir = items[cursor_idx]
 
                 if raw_name == "..":
                     current_dir = os.path.dirname(current_dir)
