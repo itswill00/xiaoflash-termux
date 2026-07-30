@@ -1,6 +1,6 @@
 import os
 from rich.console import Console
-from rich.prompt import Prompt
+from core.tui_engine import TUIEngine
 
 console = Console()
 
@@ -40,16 +40,17 @@ def render_section_header(device_data, title):
     render_header(device_data)
     console.print(f"[bold cyan]:: {title}[/bold cyan]\n")
 
-def show_main_menu():
-    console.print("Menu Options:")
-    console.print("  1. Flash Fastboot ROM package (.tgz / .tar.gz / folder)")
-    console.print("  2. Download Official ROM (MiFirm scraper)")
-    console.print("  3. Root Device (Magisk / KernelSU boot patcher)")
-    console.print("  4. Flash single partition (.img file)")
-    console.print("  5. Reboot Device (System / Bootloader / Recovery)")
-    console.print("  6. Read Device Info & Security State")
-    console.print("  7. Interactive Fastboot CLI Shell")
-    console.print("  8. ADB OTG Utilities & Sideload")
-    console.print("  0. Exit")
+def show_main_menu(device_data=None):
+    options = [
+        ("1", "1. Flash Fastboot ROM package", "(.tgz / .tar.gz / folder)"),
+        ("2", "2. Download Official ROM", "(MiFirm scraper)"),
+        ("3", "3. Root Device", "(Magisk / KernelSU boot patcher)"),
+        ("4", "4. Flash single partition", "(.img file)"),
+        ("5", "5. Reboot Device", "(System / Bootloader / Recovery)"),
+        ("6", "6. Read Device Info & Security State", ""),
+        ("7", "7. Interactive Fastboot CLI Shell", "(Custom commands)"),
+        ("8", "8. ADB OTG Utilities & Sideload", "(ADB commands / OTA sideload)"),
+        ("0", "0. Exit", "")
+    ]
 
-    return Prompt.ask("\nSelect option [0-8]", choices=["1", "2", "3", "4", "5", "6", "7", "8", "0"], default="1")
+    return TUIEngine.select_option(options, header_render_fn=lambda: render_header(device_data), title="Main Menu")

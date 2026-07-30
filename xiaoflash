@@ -22,6 +22,7 @@ from core.rom_extractor import ROMExtractor
 from core.rom_downloader import ROMDownloader
 from core.boot_patcher import BootPatcher
 from core.fastboot_shell import FastbootShell
+from core.tui_engine import TUIEngine
 from core.ui_menu import console, render_header, render_section_header, show_main_menu, clear_screen
 from rich.prompt import Prompt, Confirm
 
@@ -56,15 +57,31 @@ def main():
 
     while True:
         try:
-            render_header(device)
-            choice = show_main_menu()
+            choice = show_main_menu(device)
 
             if choice == "1":
-                render_section_header(device, "Flash ROM Package")
-                console.print("  Type '0' or 'b' at any prompt to return to main menu.\n")
-                rom_path = Prompt.ask("ROM path (.tgz / .tar.gz / folder)", default="/sdcard/Download/ginkgo_global_images.tgz")
+                rom_picker_opts = [
+                    ("browse_file", "📁 Browse ROM Package File (.tgz / .tar.gz / .zip)", "Interactive File Picker"),
+                    ("browse_dir", "📁 Browse Extracted ROM Directory", "Interactive Folder Picker"),
+                    ("manual", "✍️ Type Path Manually", "Text prompt"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
 
-                if rom_path.strip().lower() in ("0", "b", "back", "exit", "q"):
+                rom_pick_mode = TUIEngine.select_option(rom_picker_opts, header_render_fn=lambda: render_section_header(device, "Select ROM Source"), title="ROM Source")
+
+                if rom_pick_mode == "0":
+                    continue
+
+                rom_path = None
+                if rom_pick_mode == "browse_file":
+                    rom_path = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.tgz', '.tar.gz', '.zip'], header_render_fn=lambda: render_section_header(device, "Select ROM Archive File"), title="ROM File Picker")
+                elif rom_pick_mode == "browse_dir":
+                    rom_path = TUIEngine.file_browser("/sdcard/Download", select_dir_mode=True, header_render_fn=lambda: render_section_header(device, "Select Extracted ROM Folder"), title="ROM Folder Picker")
+                elif rom_pick_mode == "manual":
+                    render_section_header(device, "Type ROM Path Manually")
+                    rom_path = Prompt.ask("ROM path (.tgz / .tar.gz / folder)", default="/sdcard/Download/ginkgo_global_images.tgz")
+
+                if not rom_path or rom_path.strip().lower() in ("0", "b", "back", "exit", "q"):
                     continue
 
                 if not os.path.exists(rom_path):
@@ -83,19 +100,18 @@ def main():
                         Prompt.ask("\nPress Enter to return", default="")
                         continue
 
-                render_section_header(device, "Select Flashing Mode")
-                console.print("Flashing Modes:")
-                console.print("  1. flash_all                [Clean install / Wipe data]")
-                console.print("  2. flash_all_except_storage [Preserve user storage]")
-                console.print("  3. flash_all_lock           [Clean install + Lock bootloader]")
-                console.print("  0. Back to Main Menu")
-                
-                mode_choice = Prompt.ask("\nSelect mode", choices=["1", "2", "3", "0"], default="1")
+                mode_opts = [
+                    ("1", "flash_all", "[Clean install / Wipe data]"),
+                    ("2", "flash_all_except_data_storage", "[Preserve user storage]"),
+                    ("3", "flash_all_lock", "[Clean install + Lock bootloader]"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
+
+                mode_choice = TUIEngine.select_option(mode_opts, header_render_fn=lambda: render_section_header(device, "Select Flashing Mode"), title="Flashing Mode")
                 if mode_choice == "0":
                     continue
 
-                mode_map = {"1": "flash_all", "2": "flash_all_except_data_storage", "3": "flash_all_lock"}
-                mode = mode_map[mode_choice]
+                mode = mode_choice
 
                 # Battery Voltage Safety Check
                 batt_str = device.get("battery", "4000 mV") if device else "4000 mV"
@@ -205,11 +221,11 @@ def main():
                 if not results:
                     console.print("No ROMs found matching query.")
                 else:
-                    console.print(f"\nAvailable ROMs ({len(results)} found):\n")
-                    for idx, r in enumerate(results[:15], start=1):
-                        console.print(f"  {idx}. {r['version']} | {r['region']} | {r['os']} | Size: {r['size']}")
+                    rom_dl_opts = [(str(idx), f"{r['version']} | {r['region']} | {r['os']}", f"Size: {r['size']}") for idx, r in enumerate(results[:15], start=1)]
+                    rom_dl_opts.append(("0", "0. Back to Main Menu", ""))
 
-                    dl_choice = Prompt.ask("\nSelect index (0 to cancel/back)", choices=[str(i) for i in range(len(results[:15]) + 1)], default="1")
+                    dl_choice = TUIEngine.select_option(rom_dl_opts, header_render_fn=lambda: render_section_header(device, "Select Official ROM to Download"), title="ROM Download Picker")
+
                     if dl_choice != "0":
                         selected_rom = results[int(dl_choice) - 1]
                         ok, downloaded_path = ROMDownloader.download_rom(selected_rom)
@@ -220,14 +236,35 @@ def main():
                             ROMExtractor.extract_rom(downloaded_path, extract_dir, progress_callback=lambda m, s: console.print(f"[{s}] {m}"))
 
             elif choice == "3":
-                render_section_header(device, "Root Device")
-                console.print("  Type '0' or 'b' at any prompt to return to main menu.\n")
+                root_picker_opts = [
+                    ("browse", "📁 Browse Boot Image File (.img)", "Interactive File Picker"),
+                    ("manual", "✍️ Type Boot Image Path Manually", "Text prompt"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
 
-                boot_path = Prompt.ask("Boot image path", default="/sdcard/Download/boot.img")
-                if boot_path.strip() in ("0", "b", "back", "q"):
+                root_pick = TUIEngine.select_option(root_picker_opts, header_render_fn=lambda: render_section_header(device, "Root Device - Select Boot Image"), title="Boot Image Picker")
+                if root_pick == "0":
                     continue
 
-                root_type = Prompt.ask("Method", choices=["magisk", "kernelsu"], default="magisk")
+                boot_path = None
+                if root_pick == "browse":
+                    boot_path = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.img'], header_render_fn=lambda: render_section_header(device, "Select Boot Image File"), title="Boot Image Browser")
+                elif root_pick == "manual":
+                    render_section_header(device, "Type Boot Image Path")
+                    boot_path = Prompt.ask("Boot image path", default="/sdcard/Download/boot.img")
+
+                if not boot_path or boot_path.strip() in ("0", "b", "back", "q"):
+                    continue
+
+                root_opts = [
+                    ("magisk", "Magisk Root", "Patch boot image with Magisk"),
+                    ("kernelsu", "KernelSU Root", "Patch boot image with KernelSU"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
+
+                root_type = TUIEngine.select_option(root_opts, header_render_fn=lambda: render_section_header(device, "Select Root Method"), title="Root Method")
+                if root_type == "0":
+                    continue
 
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
@@ -236,15 +273,12 @@ def main():
                     BootPatcher.patch_and_flash(fastboot_instance, serial, boot_path, root_type=root_type, is_simulated=is_simulated)
 
             elif choice == "4":
-                render_section_header(device, "Flash Single Partition")
-                console.print("  Type '0' or 'b' at any prompt to return to main menu.\n")
-
                 partition = Prompt.ask("Partition name", default="boot")
                 if partition.strip() in ("0", "b", "back", "q"):
                     continue
 
-                img_path = Prompt.ask("Image file path", default="/sdcard/Download/boot.img")
-                if img_path.strip() in ("0", "b", "back", "q"):
+                img_path = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.img'], header_render_fn=lambda: render_section_header(device, f"Select Image File for '{partition}'"), title="Single Partition File Browser")
+                if not img_path:
                     continue
 
                 serial = device["serial"] if device else "11bb599a"
@@ -259,13 +293,14 @@ def main():
                     fastboot_instance.flash_partition(serial, partition, img_path, is_simulated=is_simulated, callback=cb)
 
             elif choice == "5":
-                render_section_header(device, "Reboot Device")
-                console.print("  1. System")
-                console.print("  2. Bootloader / Fastboot")
-                console.print("  3. Recovery")
-                console.print("  0. Back to Main Menu")
+                reboot_opts = [
+                    ("1", "System", "Normal reboot into Android OS"),
+                    ("2", "Bootloader / Fastboot", "Reboot target into Fastboot mode"),
+                    ("3", "Recovery", "Reboot target into Recovery mode"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
                 
-                res_c = Prompt.ask("\nReboot target", choices=["1", "2", "3", "0"], default="1")
+                res_c = TUIEngine.select_option(reboot_opts, header_render_fn=lambda: render_section_header(device, "Reboot Target Device"), title="Reboot Options")
                 if res_c == "0":
                     continue
 
@@ -297,20 +332,18 @@ def main():
                 FastbootShell.run_interactive_shell(fastboot_instance, device)
 
             elif choice == "8":
-                render_section_header(device, "ADB OTG Utilities & Sideload")
+                adb_opts = [
+                    ("1", "Reboot to Fastboot Mode", "adb reboot bootloader"),
+                    ("2", "Reboot to Recovery Mode", "adb reboot recovery"),
+                    ("3", "Sideload OTA / Recovery package (.zip)", "adb sideload file.zip"),
+                    ("4", "Read system properties", "adb shell getprop"),
+                    ("5", "Custom ADB Shell command", "adb shell <cmd>"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
+
+                adb_c = TUIEngine.select_option(adb_opts, header_render_fn=lambda: render_section_header(device, "ADB OTG Utilities & Sideload"), title="ADB Options")
                 serial = device["serial"] if device else "11bb599a"
-                is_sim = device.get("is_simulated", False) if device else False
 
-                console.print("ADB Options:")
-                console.print("  1. Reboot to Fastboot Mode (adb reboot bootloader)")
-                console.print("  2. Reboot to Recovery Mode (adb reboot recovery)")
-                console.print("  3. Sideload OTA / Recovery package (.zip)")
-                console.print("  4. Read system properties (adb shell getprop)")
-                console.print("  5. Custom ADB Shell command")
-                console.print("  0. Back to Main Menu")
-
-                adb_c = Prompt.ask("\nSelect ADB action", choices=["1", "2", "3", "4", "5", "0"], default="1")
-                
                 if adb_c == "1":
                     fastboot_instance.adb_ctrl.reboot(serial, "bootloader")
                     console.print("[green]Sent: adb reboot bootloader[/green]")
@@ -320,10 +353,10 @@ def main():
                     console.print("[green]Sent: adb reboot recovery[/green]")
 
                 elif adb_c == "3":
-                    zip_p = Prompt.ask("Recovery OTA ZIP path", default="/sdcard/Download/ota.zip")
-                    if os.path.exists(zip_p):
+                    zip_p = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.zip'], header_render_fn=lambda: render_section_header(device, "Select Recovery OTA ZIP File"), title="ADB Sideload ZIP Browser")
+                    if zip_p and os.path.exists(zip_p):
                         fastboot_instance.adb_ctrl.sideload(serial, zip_p, callback=lambda m, s: console.print(f"[{s}] {m}"))
-                    else:
+                    elif zip_p:
                         console.print(f"[red]Error: ZIP file '{zip_p}' missing.[/red]")
 
                 elif adb_c == "4":
