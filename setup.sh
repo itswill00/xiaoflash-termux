@@ -35,10 +35,12 @@ if [ ! -f "$TARGET_SCRIPT" ]; then
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
-    su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; python3 $TARGET_SCRIPT \"\$@\""
+    su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; export HOME=/data/data/com.termux/files/home; export ANDROID_USER_HOME=/data/data/com.termux/files/home/.android; python3 $TARGET_SCRIPT \"\$@\""
 else
     export PATH=/data/data/com.termux/files/usr/bin:$PATH
     export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib
+    export HOME=/data/data/com.termux/files/home
+    export ANDROID_USER_HOME=/data/data/com.termux/files/home/.android
     python3 "$TARGET_SCRIPT" "$@"
 fi
 EOF

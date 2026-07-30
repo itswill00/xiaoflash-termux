@@ -6,20 +6,25 @@ import shutil
 
 from core.py_fastboot import PyFastboot
 from core.sparse_splitter import SparseSplitter
+from core.adb_controller import ADBController
 
 class FastbootOTG:
-    """Fastboot USB-OTG Controller with High-Speed C++ Engine and PyUSB Fallback"""
+    """Fastboot & ADB USB-OTG Controller with Dual-Engine (C++ Fastboot/ADB + PyUSB Fallback)"""
     
     def __init__(self):
         self.py_fb = PyFastboot()
+        self.adb_ctrl = ADBController()
         self.fastboot_bin = shutil.which("fastboot") or "/data/data/com.termux/files/usr/bin/fastboot"
         self.connected_serial = None
         self.is_pyusb_active = False
+        self.connection_mode = "fastboot" # 'fastboot' or 'adb'
 
     def scan_devices(self):
-        """Scans devices connected via USB OTG in Fastboot mode"""
+        """Scans devices connected via USB OTG in Fastboot or ADB mode"""
         self.py_fb.dispose()
+        self.connection_mode = "fastboot"
 
+        # 1. Check Fastboot mode via C++ binary under su
         if os.path.exists(self.fastboot_bin):
             try:
                 env = dict(os.environ)
@@ -37,11 +42,13 @@ class FastbootOTG:
             except:
                 pass
 
+        # 2. Check Fastboot mode via PyUSB
         ok, serial = self.py_fb.connect()
         if ok or self.connected_serial:
             serial = self.connected_serial or serial
             self.connected_serial = serial
             self.is_pyusb_active = True
+            self.connection_mode = "fastboot"
             
             product = self.py_fb.getvar("product")
             anti = self.py_fb.getvar("anti")
@@ -65,6 +72,7 @@ class FastbootOTG:
             return {
                 "serial": serial,
                 "mode": "Fastboot OTG Engine",
+                "conn_type": "fastboot",
                 "product": product if product != "N/A" else "ginkgo",
                 "name": dev_name,
                 "chipset": "Qualcomm / MediaTek",
@@ -72,11 +80,41 @@ class FastbootOTG:
                 "unlocked": unlocked if unlocked != "N/A" else "yes",
                 "battery": f"{battery} mV" if battery != "N/A" else "4380 mV",
                 "is_simulated": False
-            }, f"OTG Device detected: {serial} ({dev_name})"
+            }, f"OTG Device detected (Fastboot): {serial} ({dev_name})"
 
+        # 3. Check ADB mode via ADBController
+        adb_dev, adb_msg = self.adb_ctrl.scan_adb_devices()
+        if adb_dev:
+            self.connected_serial = adb_dev["serial"]
+            self.connection_mode = "adb"
+
+            props = self.adb_ctrl.get_device_props(adb_dev["serial"])
+            dev_name = props.get("marketname") or props.get("model") or props.get("device") or "Xiaomi Device"
+            product_code = props.get("device") or "xiaomi"
+            locked_val = props.get("locked", "0")
+            unlocked_str = "no" if locked_val == "1" else "yes"
+
+            return {
+                "serial": adb_dev["serial"],
+                "mode": f"ADB OTG Engine ({adb_dev['state'].upper()})",
+                "conn_type": "adb",
+                "adb_state": adb_dev["state"],
+                "product": product_code,
+                "name": dev_name,
+                "chipset": "Qualcomm / MediaTek",
+                "anti": 1,
+                "unlocked": unlocked_str,
+                "battery": "4000 mV",
+                "android_ver": props.get("android_ver", "Android"),
+                "miui_ver": props.get("miui_ver", "MIUI"),
+                "is_simulated": False
+            }, f"OTG Device detected (ADB): {adb_dev['serial']} ({dev_name})"
+
+        # 4. Simulation mode
         return {
             "serial": "XM_OTG_984A09",
             "mode": "Fastboot OTG",
+            "conn_type": "fastboot",
             "product": "ginkgo",
             "name": "Redmi Note 8",
             "chipset": "Qualcomm Snapdragon 665",
@@ -92,7 +130,7 @@ class FastbootOTG:
         return "N/A"
 
     def erase_partition(self, serial, partition, is_simulated=False):
-        """Erases a partition via Fastboot OTG (clears stale bootloader flags like misc/ddr/apdp)"""
+        """Erases a partition via Fastboot OTG"""
         if is_simulated:
             return True, "OKAY"
 
@@ -128,7 +166,6 @@ class FastbootOTG:
                 callback(f"Flashing '{partition}' OKAY", "success")
             return True, "OKAY"
 
-        # Dispose Python USB handles so C++ binary gets instant exclusive USB access
         self.py_fb.dispose()
 
         # Priority 1: High-Speed Android C++ Fastboot Binary under su
@@ -139,6 +176,9 @@ class FastbootOTG:
                 env["PATH"] = f"/data/data/com.termux/files/usr/bin:{env.get('PATH', '')}"
                 env["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib"
                 
+                if callback:
+                    callback(f"Flashing '{partition}' via C++ Fastboot Engine...", "process")
+
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
                 stdout, stderr = proc.communicate()
                 out_combined = (stdout + "\n" + stderr).strip()
@@ -215,6 +255,11 @@ class FastbootOTG:
             
         self.py_fb.dispose()
 
+        # If in ADB mode, reboot via ADB
+        if self.connection_mode == "adb":
+            return self.adb_ctrl.reboot(serial, target)
+
+        # Fastboot reboot
         if os.path.exists(self.fastboot_bin):
             try:
                 target_cmd = "reboot-bootloader" if target == "bootloader" else ("reboot-recovery" if target == "recovery" else "reboot")

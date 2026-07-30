@@ -13,7 +13,7 @@ if os.geteuid() != 0:
     if os.path.exists(su_bin):
         script_file = os.path.abspath(__file__)
         args_str = " ".join(f'"{a}"' for a in sys.argv[1:])
-        cmd = f"export PATH=/data/data/com.termux/files/usr/bin:$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; python3 \"{script_file}\" {args_str}".strip()
+        cmd = f"export PATH=/data/data/com.termux/files/usr/bin:$PATH; export LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib; export HOME=/data/data/com.termux/files/home; export ANDROID_USER_HOME=/data/data/com.termux/files/home/.android; python3 \"{script_file}\" {args_str}".strip()
         os.execv(su_bin, [su_bin, "-c", cmd])
 
 from core.fastboot_otg import FastbootOTG
@@ -261,7 +261,7 @@ def main():
             elif choice == "5":
                 render_section_header(device, "Reboot Device")
                 console.print("  1. System")
-                console.print("  2. Bootloader")
+                console.print("  2. Bootloader / Fastboot")
                 console.print("  3. Recovery")
                 console.print("  0. Back to Main Menu")
                 
@@ -288,10 +288,57 @@ def main():
                     console.print(f"  Bootloader   : [green]{device['unlocked'].upper()}[/green]")
                     console.print(f"  Battery      : {device['battery']}")
                     console.print(f"  Driver Engine: {device['mode']}")
+                    if "android_ver" in device:
+                        console.print(f"  Android Ver  : [green]{device['android_ver']}[/green]")
+                        console.print(f"  MIUI/OS Ver  : [yellow]{device['miui_ver']}[/yellow]")
 
             elif choice == "7":
                 render_section_header(device, "Interactive Fastboot CLI Shell")
                 FastbootShell.run_interactive_shell(fastboot_instance, device)
+
+            elif choice == "8":
+                render_section_header(device, "ADB OTG Utilities & Sideload")
+                serial = device["serial"] if device else "11bb599a"
+                is_sim = device.get("is_simulated", False) if device else False
+
+                console.print("ADB Options:")
+                console.print("  1. Reboot to Fastboot Mode (adb reboot bootloader)")
+                console.print("  2. Reboot to Recovery Mode (adb reboot recovery)")
+                console.print("  3. Sideload OTA / Recovery package (.zip)")
+                console.print("  4. Read system properties (adb shell getprop)")
+                console.print("  5. Custom ADB Shell command")
+                console.print("  0. Back to Main Menu")
+
+                adb_c = Prompt.ask("\nSelect ADB action", choices=["1", "2", "3", "4", "5", "0"], default="1")
+                
+                if adb_c == "1":
+                    fastboot_instance.adb_ctrl.reboot(serial, "bootloader")
+                    console.print("[green]Sent: adb reboot bootloader[/green]")
+
+                elif adb_c == "2":
+                    fastboot_instance.adb_ctrl.reboot(serial, "recovery")
+                    console.print("[green]Sent: adb reboot recovery[/green]")
+
+                elif adb_c == "3":
+                    zip_p = Prompt.ask("Recovery OTA ZIP path", default="/sdcard/Download/ota.zip")
+                    if os.path.exists(zip_p):
+                        fastboot_instance.adb_ctrl.sideload(serial, zip_p, callback=lambda m, s: console.print(f"[{s}] {m}"))
+                    else:
+                        console.print(f"[red]Error: ZIP file '{zip_p}' missing.[/red]")
+
+                elif adb_c == "4":
+                    props = fastboot_instance.adb_ctrl.get_device_props(serial)
+                    console.print("\nDevice Properties:")
+                    for k, v in props.items():
+                        console.print(f"  {k:<14}: [cyan]{v}[/cyan]")
+
+                elif adb_c == "5":
+                    cmd_str = Prompt.ask("ADB shell command", default="getprop ro.product.model")
+                    ok_sh, out_sh = fastboot_instance.adb_ctrl.shell(serial, cmd_str)
+                    if ok_sh:
+                        console.print(f"\n{out_sh}")
+                    else:
+                        console.print(f"[red]ADB shell error: {out_sh}[/red]")
 
             elif choice == "0":
                 graceful_exit()
