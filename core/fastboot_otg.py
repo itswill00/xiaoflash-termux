@@ -138,7 +138,11 @@ class FastbootOTG:
 
         if os.path.exists(self.fastboot_bin):
             try:
-                cmd = [self.fastboot_bin, "-s", serial, "erase", partition]
+                cmd = [self.fastboot_bin]
+                if serial and not serial.startswith("XM_OTG"):
+                    cmd.extend(["-s", serial])
+                cmd.extend(["erase", partition])
+
                 env = dict(os.environ)
                 env["PATH"] = f"/data/data/com.termux/files/usr/bin:{env.get('PATH', '')}"
                 env["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib"
@@ -171,7 +175,11 @@ class FastbootOTG:
         # Priority 1: High-Speed Android C++ Fastboot Binary under su
         if os.path.exists(self.fastboot_bin):
             try:
-                cmd = [self.fastboot_bin, "-s", serial, "flash", partition, img_path]
+                cmd = [self.fastboot_bin]
+                if serial and not serial.startswith("XM_OTG"):
+                    cmd.extend(["-s", serial])
+                cmd.extend(["flash", partition, img_path])
+
                 env = dict(os.environ)
                 env["PATH"] = f"/data/data/com.termux/files/usr/bin:{env.get('PATH', '')}"
                 env["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib"
@@ -255,7 +263,7 @@ class FastbootOTG:
             
         self.py_fb.dispose()
 
-        # If in ADB mode, reboot via ADB
+        # If in ADB mode, reboot via ADBController
         if self.connection_mode == "adb":
             return self.adb_ctrl.reboot(serial, target)
 
@@ -263,14 +271,25 @@ class FastbootOTG:
         if os.path.exists(self.fastboot_bin):
             try:
                 target_cmd = "reboot-bootloader" if target == "bootloader" else ("reboot-recovery" if target == "recovery" else "reboot")
-                cmd = [self.fastboot_bin, "-s", serial, target_cmd]
+                cmd = [self.fastboot_bin]
+                if serial and not serial.startswith("XM_OTG"):
+                    cmd.extend(["-s", serial])
+                cmd.append(target_cmd)
+
                 env = dict(os.environ)
                 env["PATH"] = f"/data/data/com.termux/files/usr/bin:{env.get('PATH', '')}"
                 env["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib"
-                subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-                return True, "Reboot OKAY"
-            except:
-                pass
+                
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+                stdout, stderr = proc.communicate()
+                out_combined = (stdout + "\n" + stderr).strip()
+
+                if proc.returncode == 0 or "reboot" in out_combined.lower() or "OKAY" in out_combined or not out_combined:
+                    return True, "Reboot OKAY"
+                else:
+                    return False, out_combined or f"Exit code {proc.returncode}"
+            except Exception as e:
+                return False, str(e)
 
         if self.is_pyusb_active:
             ok, msg = self.py_fb.reboot(target)

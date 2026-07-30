@@ -62,7 +62,11 @@ class ADBController:
 
         for label, prop_name in prop_keys.items():
             try:
-                cmd = [self.adb_bin, "-s", serial, "shell", "getprop", prop_name]
+                cmd = [self.adb_bin]
+                if serial and not serial.startswith("XM_OTG"):
+                    cmd.extend(["-s", serial])
+                cmd.extend(["shell", "getprop", prop_name])
+
                 val = subprocess.check_output(cmd, text=True, env=env, stderr=subprocess.DEVNULL).strip()
                 if val:
                     props[label] = val
@@ -72,17 +76,29 @@ class ADBController:
         return props
 
     def reboot(self, serial, target="bootloader"):
-        """Reboots target device via ADB"""
+        """Reboots target device via ADB with stdout/stderr capture"""
         if not os.path.exists(self.adb_bin):
             return False, "ADB binary missing"
 
         env = self._get_env()
         target_cmd = "bootloader" if target == "bootloader" else ("recovery" if target == "recovery" else "")
-        cmd = [self.adb_bin, "-s", serial, "reboot"] + ([target_cmd] if target_cmd else [])
+        
+        cmd = [self.adb_bin]
+        if serial and not serial.startswith("XM_OTG"):
+            cmd.extend(["-s", serial])
+        cmd.append("reboot")
+        if target_cmd:
+            cmd.append(target_cmd)
 
         try:
-            subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-            return True, f"Reboot command sent ({target})"
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+            stdout, stderr = proc.communicate()
+            out_combined = (stdout + "\n" + stderr).strip()
+
+            if proc.returncode == 0 or "reboot" in out_combined.lower() or not out_combined:
+                return True, f"Reboot command sent ({target})"
+            else:
+                return False, out_combined or f"Exit code {proc.returncode}"
         except Exception as e:
             return False, str(e)
 
@@ -92,7 +108,10 @@ class ADBController:
             return False, f"File missing: {zip_path}"
 
         env = self._get_env()
-        cmd = [self.adb_bin, "-s", serial, "sideload", zip_path]
+        cmd = [self.adb_bin]
+        if serial and not serial.startswith("XM_OTG"):
+            cmd.extend(["-s", serial])
+        cmd.extend(["sideload", zip_path])
 
         try:
             if callback:
@@ -122,7 +141,10 @@ class ADBController:
             return False, "ADB binary missing"
 
         env = self._get_env()
-        cmd = [self.adb_bin, "-s", serial, "shell", cmd_str]
+        cmd = [self.adb_bin]
+        if serial and not serial.startswith("XM_OTG"):
+            cmd.extend(["-s", serial])
+        cmd.extend(["shell", cmd_str])
 
         try:
             res = subprocess.check_output(cmd, text=True, env=env, stderr=subprocess.STDOUT).strip()
