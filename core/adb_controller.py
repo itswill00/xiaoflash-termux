@@ -60,11 +60,13 @@ class ADBController:
             "locked": "ro.boot.flash.locked"
         }
 
+        active_serial = self.get_active_adb_serial() or serial
+
         for label, prop_name in prop_keys.items():
             try:
                 cmd = [self.adb_bin]
-                if serial and not serial.startswith("XM_OTG"):
-                    cmd.extend(["-s", serial])
+                if active_serial and not active_serial.startswith("XM_OTG"):
+                    cmd.extend(["-s", active_serial])
                 cmd.extend(["shell", "getprop", prop_name])
 
                 val = subprocess.check_output(cmd, text=True, env=env, stderr=subprocess.DEVNULL).strip()
@@ -75,6 +77,22 @@ class ADBController:
 
         return props
 
+    def get_active_adb_serial(self):
+        """Dynamically detects active connected ADB/Sideload USB serial"""
+        if not os.path.exists(self.adb_bin):
+            return None
+
+        try:
+            env = self._get_env()
+            res = subprocess.check_output([self.adb_bin, "devices"], text=True, env=env, stderr=subprocess.STDOUT).strip()
+            for line in res.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] != "List":
+                    return parts[0]
+        except:
+            pass
+        return None
+
     def reboot(self, serial, target="bootloader"):
         """Reboots target device via ADB with stdout/stderr capture"""
         if not os.path.exists(self.adb_bin):
@@ -82,10 +100,11 @@ class ADBController:
 
         env = self._get_env()
         target_cmd = "bootloader" if target == "bootloader" else ("recovery" if target == "recovery" else "")
+        active_serial = self.get_active_adb_serial() or serial
         
         cmd = [self.adb_bin]
-        if serial and not serial.startswith("XM_OTG"):
-            cmd.extend(["-s", serial])
+        if active_serial and not active_serial.startswith("XM_OTG"):
+            cmd.extend(["-s", active_serial])
         cmd.append("reboot")
         if target_cmd:
             cmd.append(target_cmd)
@@ -103,25 +122,27 @@ class ADBController:
             return False, str(e)
 
     def sideload(self, serial, zip_path, callback=None):
-        """Sideloads an OTA/Recovery ZIP file via ADB"""
+        """Sideloads an OTA/Recovery ZIP file via ADB with dynamic serial resolution"""
         if not os.path.exists(zip_path):
             return False, f"File missing: {zip_path}"
 
         env = self._get_env()
+        active_serial = self.get_active_adb_serial()
+
         cmd = [self.adb_bin]
-        if serial and not serial.startswith("XM_OTG"):
-            cmd.extend(["-s", serial])
+        if active_serial:
+            cmd.extend(["-s", active_serial])
         cmd.extend(["sideload", zip_path])
 
         try:
             if callback:
-                callback("Initiating ADB sideload transfer...", "process")
+                callback(f"Initiating ADB sideload transfer ({os.path.basename(zip_path)})...", "process")
 
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
             stdout, stderr = proc.communicate()
             out_combined = (stdout + "\n" + stderr).strip()
 
-            if proc.returncode == 0 or "Total xfer" in out_combined or "100%" in out_combined:
+            if proc.returncode == 0 or "Total xfer" in out_combined or "100%" in out_combined or "success" in out_combined.lower():
                 if callback:
                     callback("Sideload completed OKAY", "success")
                 return True, "Sideload OKAY"
@@ -141,9 +162,11 @@ class ADBController:
             return False, "ADB binary missing"
 
         env = self._get_env()
+        active_serial = self.get_active_adb_serial() or serial
+
         cmd = [self.adb_bin]
-        if serial and not serial.startswith("XM_OTG"):
-            cmd.extend(["-s", serial])
+        if active_serial and not active_serial.startswith("XM_OTG"):
+            cmd.extend(["-s", active_serial])
         cmd.extend(["shell", cmd_str])
 
         try:
