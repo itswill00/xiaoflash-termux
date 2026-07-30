@@ -273,24 +273,50 @@ def main():
                     BootPatcher.patch_and_flash(fastboot_instance, serial, boot_path, root_type=root_type, is_simulated=is_simulated)
 
             elif choice == "4":
-                partition = Prompt.ask("Partition name", default="boot")
-                if partition.strip() in ("0", "b", "back", "q"):
+                part_opts = [
+                    ("recovery", "recovery", "Recovery Partition (TWRP / OrangeFox / Stock)"),
+                    ("boot", "boot", "Boot Partition (Kernel / Root)"),
+                    ("init_boot", "init_boot", "Init Boot Partition (Android 13+ KSU)"),
+                    ("vbmeta", "vbmeta", "VBMeta Partition (AVB Disabled)"),
+                    ("super", "super", "Dynamic Super Partition"),
+                    ("custom", "Custom Partition", "Type custom partition name"),
+                    ("0", "0. Back to Main Menu", "")
+                ]
+
+                partition = TUIEngine.select_option(part_opts, header_render_fn=lambda: render_section_header(device, "Select Target Partition"), title="Target Partition")
+                if partition == "0":
                     continue
 
-                img_path = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.img'], header_render_fn=lambda: render_section_header(device, f"Select Image File for '{partition}'"), title="Single Partition File Browser")
+                if partition == "custom":
+                    render_section_header(device, "Type Custom Partition Name")
+                    partition = Prompt.ask("Partition name", default="recovery").strip()
+
+                if not partition or partition in ("0", "b", "back", "q"):
+                    continue
+
+                img_path = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.img'], header_render_fn=lambda: render_section_header(device, f"Select Image File for '{partition}'"), title=f"Select Image for {partition}")
                 if not img_path:
                     continue
 
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
 
-                if Confirm.ask(f"Flash '{img_path}' -> {partition}?"):
-                    def cb(m, s):
-                        if s == "success":
-                            console.print(f"{partition} OKAY")
-                        elif s == "error":
-                            console.print(f"{partition} FAIL: {m}")
-                    fastboot_instance.flash_partition(serial, partition, img_path, is_simulated=is_simulated, callback=cb)
+                render_section_header(device, "Confirm Single Partition Flash")
+                console.print(f"  Target Device : [cyan]{device['name'] if device else 'Target'}[/cyan]")
+                console.print(f"  Partition     : [yellow]{partition}[/yellow]")
+                console.print(f"  Image File    : [green]{img_path}[/green]")
+                console.print(f"  File Size     : {format_size(os.path.getsize(img_path)) if os.path.exists(img_path) else 'N/A'}\n")
+
+                if Confirm.ask(f"Proceed flashing '{os.path.basename(img_path)}' to '{partition}'?"):
+                    render_section_header(device, "Flashing Single Partition")
+                    console.print(f"Flashing '{partition}' partition...")
+                    
+                    ok_p, err_p = fastboot_instance.flash_partition(serial, partition, img_path, is_simulated=is_simulated, callback=lambda m, s: console.print(f"[{s}] {m}"))
+                    
+                    if ok_p:
+                        console.print(f"\n[bold green]SUCCESS: Flashed '{partition}' partition OKAY.[/bold green]")
+                    else:
+                        console.print(f"\n[bold red]FAIL: Flashing '{partition}' failed ({err_p}).[/bold red]")
 
             elif choice == "5":
                 reboot_opts = [
