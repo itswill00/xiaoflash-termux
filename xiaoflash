@@ -369,6 +369,7 @@ def main():
 
                 adb_c = TUIEngine.select_option(adb_opts, header_render_fn=lambda: render_section_header(device, "ADB OTG Utilities & Sideload"), title="ADB Options")
                 serial = device["serial"] if device else "11bb599a"
+                is_simulated = device.get("is_simulated", False) if device else False
 
                 if adb_c == "1":
                     fastboot_instance.adb_ctrl.reboot(serial, "bootloader")
@@ -381,6 +382,19 @@ def main():
                 elif adb_c == "3":
                     zip_p = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.zip'], header_render_fn=lambda: render_section_header(device, "Select Recovery OTA ZIP File"), title="ADB Sideload ZIP Browser")
                     if zip_p and os.path.exists(zip_p):
+                        conn_type = device.get("conn_type", "fastboot") if device else "fastboot"
+                        
+                        # Smart Connection Mode Guard for Sideload
+                        if conn_type == "fastboot" and not is_simulated:
+                            render_section_header(device, "ADB Sideload - Mode Guard")
+                            console.print("[yellow]Notice: Target device is currently connected in Fastboot mode.[/yellow]")
+                            console.print("ADB Sideload requires target device to be booted into Recovery mode.\n")
+
+                            if Confirm.ask("Reboot target device into Recovery mode now?"):
+                                console.print("\nRebooting target to Recovery mode...")
+                                fastboot_instance.reboot(serial, "recovery", is_simulated=is_simulated)
+                                Prompt.ask("\nIn TWRP/Recovery on target device, go to 'Advanced -> ADB Sideload' and swipe to start, then press Enter here", default="")
+
                         fastboot_instance.adb_ctrl.sideload(serial, zip_p, callback=lambda m, s: console.print(f"[{s}] {m}"))
                     elif zip_p:
                         console.print(f"[red]Error: ZIP file '{zip_p}' missing.[/red]")
