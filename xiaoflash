@@ -413,25 +413,45 @@ def main():
                     continue
 
                 adb_opts = [
-                    ("1", "Reboot to Fastboot Mode", "adb reboot bootloader"),
-                    ("2", "Reboot to Recovery Mode", "adb reboot recovery"),
+                    ("1", "Push File to Target Device", "adb push local_file -> /sdcard/"),
+                    ("2", "Pull File from Target Device", "adb pull /sdcard/file -> local"),
                     ("3", "Sideload OTA / Recovery package (.zip)", "adb sideload file.zip"),
-                    ("4", "Read system properties", "adb shell getprop"),
-                    ("5", "Custom ADB Shell command", "adb shell <cmd>"),
+                    ("4", "Reboot to Fastboot Mode", "adb reboot bootloader"),
+                    ("5", "Reboot to Recovery Mode", "adb reboot recovery"),
+                    ("6", "Read system properties", "adb shell getprop"),
+                    ("7", "Custom ADB Shell command", "adb shell <cmd>"),
                     ("0", "0. Back to Main Menu", "")
                 ]
 
-                adb_c = TUIEngine.select_option(adb_opts, header_render_fn=lambda: render_section_header(device, "ADB OTG Utilities & Sideload"), title="ADB Options")
+                adb_c = TUIEngine.select_option(adb_opts, header_render_fn=lambda: render_section_header(device, "ADB OTG Utilities & File Transfer"), title="ADB Options")
                 serial = device["serial"] if device else "11bb599a"
                 is_simulated = device.get("is_simulated", False) if device else False
 
                 if adb_c == "1":
-                    fastboot_instance.adb_ctrl.reboot(serial, "bootloader")
-                    console.print("[green]Sent: adb reboot bootloader[/green]")
+                    # ADB Push File
+                    local_p = TUIEngine.file_browser("/sdcard/Download", header_render_fn=lambda: render_section_header(device, "ADB Push - Select Local File"), title="Local File Browser")
+                    if local_p and os.path.exists(local_p):
+                        render_section_header(device, "ADB Push - Select Destination")
+                        remote_d = Prompt.ask("Destination directory on target phone", default="/sdcard/Download/").strip()
+                        
+                        if not is_simulated:
+                            ok_sh, msg_sh = fastboot_instance.adb_ctrl.push(serial, local_p, remote_d, callback=lambda m, s: console.print(f"[{s}] {m}"))
+                        else:
+                            console.print(f"\n[yellow]Simulated Push: '{os.path.basename(local_p)}' -> '{remote_d}' OKAY[/yellow]")
+                    elif local_p:
+                        console.print(f"[red]Error: Local file '{local_p}' missing.[/red]")
 
                 elif adb_c == "2":
-                    fastboot_instance.adb_ctrl.reboot(serial, "recovery")
-                    console.print("[green]Sent: adb reboot recovery[/green]")
+                    # ADB Pull File
+                    render_section_header(device, "ADB Pull - Target Remote File")
+                    remote_f = Prompt.ask("Remote file path on target phone", default="/sdcard/Download/filename.ext").strip()
+                    
+                    local_d = TUIEngine.file_browser("/sdcard/Download", select_dir_mode=True, header_render_fn=lambda: render_section_header(device, "ADB Pull - Select Local Destination Folder"), title="Local Destination Folder")
+                    if local_d and os.path.exists(local_d):
+                        if not is_simulated:
+                            ok_sh, msg_sh = fastboot_instance.adb_ctrl.pull(serial, remote_f, local_d, callback=lambda m, s: console.print(f"[{s}] {m}"))
+                        else:
+                            console.print(f"\n[yellow]Simulated Pull: '{remote_f}' -> '{local_d}' OKAY[/yellow]")
 
                 elif adb_c == "3":
                     zip_p = TUIEngine.file_browser("/sdcard/Download", allowed_exts=['.zip'], header_render_fn=lambda: render_section_header(device, "Select Recovery OTA ZIP File"), title="ADB Sideload ZIP Browser")
@@ -458,12 +478,20 @@ def main():
                         console.print(f"[red]Error: ZIP file '{zip_p}' missing.[/red]")
 
                 elif adb_c == "4":
+                    fastboot_instance.adb_ctrl.reboot(serial, "bootloader")
+                    console.print("[green]Sent: adb reboot bootloader[/green]")
+
+                elif adb_c == "5":
+                    fastboot_instance.adb_ctrl.reboot(serial, "recovery")
+                    console.print("[green]Sent: adb reboot recovery[/green]")
+
+                elif adb_c == "6":
                     props = fastboot_instance.adb_ctrl.get_device_props(serial)
                     console.print("\nDevice Properties:")
                     for k, v in props.items():
                         console.print(f"  {k:<14}: [cyan]{v}[/cyan]")
 
-                elif adb_c == "5":
+                elif adb_c == "7":
                     cmd_str = Prompt.ask("ADB shell command", default="getprop ro.product.model")
                     ok_sh, out_sh = fastboot_instance.adb_ctrl.shell(serial, cmd_str)
                     if ok_sh:

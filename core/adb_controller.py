@@ -4,7 +4,7 @@ import shutil
 import subprocess
 
 class ADBController:
-    """ADB-OTG Controller with Root Environment Exports"""
+    """ADB-OTG Controller with Root Environment Exports & File Transfer Engine"""
 
     def __init__(self):
         self.adb_bin = shutil.which("adb") or "/data/data/com.termux/files/usr/bin/adb"
@@ -154,6 +154,73 @@ class ADBController:
         except Exception as e:
             if callback:
                 callback(f"Sideload error: {str(e)}", "error")
+            return False, str(e)
+
+    def push(self, serial, local_path, remote_dir="/sdcard/Download/", callback=None):
+        """Pushes a local file from Termux to target device storage via ADB"""
+        if not os.path.exists(local_path):
+            return False, f"Local file missing: {local_path}"
+
+        env = self._get_env()
+        active_serial = self.get_active_adb_serial() or serial
+
+        cmd = [self.adb_bin]
+        if active_serial and not active_serial.startswith("XM_OTG"):
+            cmd.extend(["-s", active_serial])
+        cmd.extend(["push", local_path, remote_dir])
+
+        try:
+            if callback:
+                callback(f"Pushing '{os.path.basename(local_path)}' -> '{remote_dir}'...", "process")
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+            stdout, stderr = proc.communicate()
+            out_combined = (stdout + "\n" + stderr).strip()
+
+            if proc.returncode == 0 or "pushed" in out_combined.lower() or "1 file pushed" in out_combined.lower():
+                if callback:
+                    callback(f"File pushed OKAY to {remote_dir}", "success")
+                return True, f"Pushed to {remote_dir}"
+            else:
+                err_msg = stderr.strip() or stdout.strip() or "Push failed"
+                if callback:
+                    callback(f"Push failed: {err_msg}", "error")
+                return False, err_msg
+        except Exception as e:
+            if callback:
+                callback(f"Push error: {str(e)}", "error")
+            return False, str(e)
+
+    def pull(self, serial, remote_path, local_dir="/sdcard/Download/", callback=None):
+        """Pulls a remote file from target device storage to Termux via ADB"""
+        env = self._get_env()
+        active_serial = self.get_active_adb_serial() or serial
+
+        cmd = [self.adb_bin]
+        if active_serial and not active_serial.startswith("XM_OTG"):
+            cmd.extend(["-s", active_serial])
+        cmd.extend(["pull", remote_path, local_dir])
+
+        try:
+            if callback:
+                callback(f"Pulling '{remote_path}' -> '{local_dir}'...", "process")
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+            stdout, stderr = proc.communicate()
+            out_combined = (stdout + "\n" + stderr).strip()
+
+            if proc.returncode == 0 or "pulled" in out_combined.lower() or "1 file pulled" in out_combined.lower():
+                if callback:
+                    callback(f"File pulled OKAY to {local_dir}", "success")
+                return True, f"Pulled to {local_dir}"
+            else:
+                err_msg = stderr.strip() or stdout.strip() or "Pull failed"
+                if callback:
+                    callback(f"Pull failed: {err_msg}", "error")
+                return False, err_msg
+        except Exception as e:
+            if callback:
+                callback(f"Pull error: {str(e)}", "error")
             return False, str(e)
 
     def shell(self, serial, cmd_str):
